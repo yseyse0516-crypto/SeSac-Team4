@@ -9,8 +9,6 @@
 
 반드시 **[`CLAUDE.md`](./CLAUDE.md)** 를 먼저 읽으세요. 팀 모듈 소유권, Git 협업 규칙, 코딩 컨벤션이 정의되어 있습니다.
 
-구성도(아키텍처)는 [`docs/architecture/`](./docs/architecture) 참고.
-
 ## 기술 스택
 
 | 영역 | 기술 | 비고 |
