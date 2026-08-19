@@ -1,8 +1,11 @@
-// 지금은 진짜 서버가 없어서 가짜 데이터(mock)를 돌려주는 파일.
-// 필드 형태는 backend.md(정종우, 2026-08-19 최종본)의 §4/§5 계약을 따른다 (snake_case, congestion_score 0~1).
-// 나중에 백엔드가 준비되면 fetchRoutes 함수 내용만 real fetch로 바꾸면 되고, 화면 컴포넌트는 손 안 대도 된다.
+// VITE_API_BASE_URL이 설정되어 있으면 실제 백엔드(POST /api/v1/routes/search)를 호출하고,
+// 없으면 가짜 데이터(mock)를 돌려준다. 필드 형태는 backend.md(정종우, 2026-08-19 최종본)의
+// §4/§5 계약을 따른다 (snake_case, congestion_score 0~1). 내일 백엔드가 준비되면
+// frontend/.env의 VITE_API_BASE_URL만 채우면 되고, 코드는 그대로 둬도 된다.
 
 import type { RouteSearchRequest, RouteSearchResponse } from "../types/routing";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const MOCK_RESPONSE: RouteSearchResponse = {
   routes: [
@@ -102,9 +105,20 @@ const MOCK_RESPONSE: RouteSearchResponse = {
   ],
 };
 
-// 실제 백엔드가 준비되면 아래 함수 내부만 real fetch(`POST /api/v1/routes/search`)로 교체한다.
 export async function fetchRoutes(
-  _request: RouteSearchRequest
+  request: RouteSearchRequest
 ): Promise<RouteSearchResponse> {
-  return new Promise((resolve) => setTimeout(() => resolve(MOCK_RESPONSE), 300));
+  if (!API_BASE_URL) {
+    return new Promise((resolve) => setTimeout(() => resolve(MOCK_RESPONSE), 300));
+  }
+
+  const res = await fetch(`${API_BASE_URL}/api/v1/routes/search`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) {
+    throw new Error(`routes search failed: ${res.status}`);
+  }
+  return res.json();
 }
