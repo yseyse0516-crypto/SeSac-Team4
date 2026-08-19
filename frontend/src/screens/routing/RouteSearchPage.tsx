@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { RouteSearchForm, type RouteSearchValues } from "../../components/routing/RouteSearchForm";
+import { RouteMap } from "../../components/routing/RouteMap";
 import { fetchRoutes } from "../../api/routes";
 import type { RouteCandidate, TransportMode } from "../../types/routing";
 
@@ -36,6 +37,7 @@ const MODE_ICON: Record<TransportMode, string> = {
 export function RouteSearchPage() {
   const [routes, setRoutes] = useState<RouteCandidate[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
 
   async function handleSearch(values: RouteSearchValues) {
     setLoading(true);
@@ -46,6 +48,7 @@ export function RouteSearchPage() {
       departAt: `${today}T${values.departAt}:00+09:00`,
     });
     setRoutes(response.routes);
+    setSelectedRouteId(null);
     setLoading(false);
   }
 
@@ -60,9 +63,11 @@ export function RouteSearchPage() {
           {routes.map((route) => {
             const level = getCongestionLevel(route.congestion_score);
             const modes = route.segments.map((segment) => segment.mode);
+            const isSelected = selectedRouteId === route.id;
             return (
               <li
                 key={route.id}
+                onClick={() => setSelectedRouteId(isSelected ? null : route.id)}
                 style={{
                   background: "var(--surface)",
                   border: route.is_recommended ? "1px solid var(--primary)" : "1px solid var(--border)",
@@ -72,6 +77,7 @@ export function RouteSearchPage() {
                   padding: 16,
                   marginBottom: 12,
                   color: "var(--text)",
+                  cursor: "pointer",
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -108,6 +114,31 @@ export function RouteSearchPage() {
                 <div style={{ fontSize: 12, color: "var(--text-sub)", marginTop: 8 }}>
                   {PATH_TYPE_LABEL[route.path_type] ?? route.path_type} · 분당개선 {route.minute_improvement_ratio}
                 </div>
+
+                {isSelected && (
+                  <div style={{ marginTop: 12 }} onClick={(e) => e.stopPropagation()}>
+                    <RouteMap segments={route.segments} lineColor={level.color} />
+                    <ol style={{ listStyle: "none", padding: 0, marginTop: 8, fontSize: 12 }}>
+                      {route.segments.map((segment, i) => (
+                        <li
+                          key={i}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            padding: "6px 0",
+                            borderTop: i > 0 ? "1px solid var(--border)" : "none",
+                            color: "var(--text)",
+                          }}
+                        >
+                          <span>
+                            {MODE_ICON[segment.mode]} {segment.mode}
+                          </span>
+                          <span style={{ color: "var(--text-sub)" }}>{segment.duration_min}분</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
               </li>
             );
           })}
