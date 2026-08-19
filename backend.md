@@ -243,8 +243,12 @@ X-Forwarded-For(B 담당, nginx가 넘겨주는 헤더 사용). CLAUDE.md §12�
 - ~~§7.3 버스 `localStationID` = `stop_std_id` 여부~~ → 마스터 CSV 대조로 확인 완료, ID 직접 매칭으로 구현
 - ~~§8 개인정보 처리안~~ → 팀 합의 완료, CLAUDE.md 반영 완료
 - ~~§8 `/system/meta` 필드 수~~ → 6개로 확정, CLAUDE.md §12 반영 완료
+- ~~ODsay API 키 확보~~ → 2026-08-19 발급 완료. 라이브 호출로 파라미터(SX/SY/EX/EY/OPT)·응답 필드
+  검증 완료(odsay_parser.py 기대값과 정확히 일치). `backend/.env`에 저장, 인증 실패 시 `{"error":[...]}`
+  형태로 200 응답이 오는 것도 확인해서 502/404 구분 처리 반영함(odsay_client.py)
 
 **아직 열려 있음**
-1. ODsay API 키 확보 여부 — 아직 없음. 키 없이 `odsay_result.json` 샘플로 파싱 로직부터 구현 진행 중
-2. §7.2 `bus_weight`에 `stop_sequence` 컬럼 추가 — 김재우님 확인 필요 (정류장마스터 CSV에 이미 순번 데이터 있음)
-3. 쿠폰(§3) 진행 여부 — B가 통합 후 시간 되면 진행, 최종 여부는 8/20 오후에 결정
+1. §7.2 `bus_weight`에 `stop_sequence` 컬럼 추가 — 김재우님 확인 필요 (정류장마스터 CSV에 이미 순번 데이터 있음)
+2. 쿠폰(§3) 진행 여부 — B가 통합 후 시간 되면 진행, 최종 여부는 8/20 오후에 결정
+3. ODsay 호출은 서버의 등록된 IP에서만 허용됨(ODsay LAB "설정"에서 Server IP 등록 필요) — 각자 개발 환경 IP가
+   다르면 매번 등록을 바꿔야 함. AWS 배포 시 실제 서버 고정 IP로 재등록 필요 (김재우님 인프라 확정 시 확인)
