@@ -6,9 +6,11 @@ search.py 쪽에서 이 함수를 감싸서 처리한다 (core/redis.py는 B 담
 ODSAY_API_KEY가 없으면 샘플 응답(fixture)을 반환한다 — 실제 키가 없는 상태에서도
 파싱/매칭/스코어링 로직을 개발·테스트할 수 있게 하기 위함.
 
-⚠️ 아래 실제 호출 부분(파라미터명 SX/SY/EX/EY/OPT)은 ODsay Lab 공개 문서 기준 추정치다.
-실제 키를 받으면 반드시 응답을 확인해서 파라미터명·필드명이 맞는지 검증해야 한다
-(backend.md §9 "오늘 A 작업" 참고).
+파라미터명(SX/SY/EX/EY/OPT)과 응답 필드는 2026-08-19 실제 키로 라이브 호출해서 검증
+완료 — odsay_parser.py가 기대하는 필드(trafficType/startX/startY/lane 등)와 정확히
+일치함을 확인했다. 인증 실패(IP 미등록 등)는 `{"error": [...]}` 형태로 200과 함께
+오는 것도 이때 확인함 — result가 아예 없는 정상 실패 응답이라 NO_CANDIDATE와 구분해서
+처리해야 한다(_interpret_response 참고).
 """
 import json
 from pathlib import Path
@@ -61,10 +63,24 @@ def call_odsay(
     if response.status_code != 200:
         raise OdsayError(f"ODsay 응답 오류: HTTP {response.status_code}")
 
-    data = response.json()
+    return _interpret_response(response.json())
+
+
+def _interpret_response(data: dict) -> dict:
+    """ODsay가 실제로 내려주는 세 가지 응답 형태를 구분한다 (2026-08-19 라이브 확인).
+
+    1) {"error": [{"code": ..., "message": ...}]} — 인증 실패 등 API 자체 오류 → 502
+    2) {"result": {..., "path": []}} — 정상 응답이지만 경로 후보가 없음 → 404
+    3) {"result": {..., "path": [...]}} — 정상 응답
+    """
+    if "error" in data:
+        raise OdsayError(f"ODsay 오류 응답: {data['error']}")
+
     if "result" not in data:
-        # ODsay는 에러도 200으로 내려주고 본문에 error 필드를 담는 경우가 있음 — 실제 키로 확인 필요
-        raise OdsayNoCandidateError(f"ODsay 응답에 result 없음: {data}")
+        raise OdsayError(f"ODsay 응답 형식이 예상과 다름: {data}")
+
+    if not data["result"].get("path"):
+        raise OdsayNoCandidateError("ODsay가 경로 후보를 반환하지 않음")
 
     return data
 
