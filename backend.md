@@ -105,14 +105,47 @@ Base URL `/api/v1`, 인증 없음, 응답 JSON.
 | GET | `/admin/batch/latest` | B | 최신 배치 실행 상태 (N-05) |
 
 에러 코드: `400 INVALID_INPUT`, `404 NO_CANDIDATE`, `429 ODSAY_QUOTA_EXCEEDED`(캐시 유사 결과 대체 반환), `502 UPSTREAM_ERROR`
+(FastAPI `HTTPException`으로 던지므로 실제 응답 바디는 `{"detail": {"code": "NO_CANDIDATE"}}`처럼 `detail`에
+한 번 감싸져 있음 — `docs/api-contracts/routing.md`엔 이 wrapping이 아직 안 적혀 있어서 프론트 확인 필요)
 
-`/routes/search` 응답의 각 segment에는 프론트 지도 렌더링을 위해 `start`/`end` 좌표를 반드시 포함한다.
+### 5.1 `/routes/search` 실제 응답 형태 (2026-08-19 기준, 코드로 확정됨 — §6.2도 참고)
+
+윤상은님 `docs/api-contracts/routing.md`가 "미확정"으로 표시해둔 것들이 이제 전부 코드로 확정됨:
+최상위 키는 `routes`가 아니라 **`candidates`**, 각 candidate엔 **`id`**(0부터 시작하는 순번, React key로
+바로 써도 됨)와 **`is_fastest`**(최단시간 후보인지 — `is_recommended`와 별도 필드)가 추가됨.
 
 ```json
-{ "mode": "subway", "station_id": 1021, "duration_min": 28,
-  "start": {"lat": 37.5012, "lng": 127.0396},
-  "end":   {"lat": 37.4784, "lng": 126.8874} }
+{
+  "request_id": 10234,
+  "is_same": false,
+  "candidates": [
+    {
+      "id": 0,
+      "path_type": "subway+bus",
+      "total_time_min": 74,
+      "congestion_score": 0.32,
+      "minute_improvement_ratio": 5.1,
+      "is_recommended": true,
+      "is_fastest": false,
+      "segments": [
+        { "mode": "walk", "duration_min": 4, "distance_m": 292,
+          "start": {"lat": 37.5012, "lng": 127.0396}, "end": {"lat": 37.5006, "lng": 127.0364},
+          "station_id": null, "stop_id": null, "stop_std_id": null, "route_id": null,
+          "matched": false, "polyline": null },
+        { "mode": "subway", "duration_min": 28, "distance_m": 10800,
+          "start": {"lat": 37.5006, "lng": 127.0364}, "end": {"lat": 37.4842, "lng": 126.9297},
+          "station_id": 1021, "stop_id": null, "stop_std_id": null, "route_id": "2",
+          "matched": true,
+          "polyline": [ {"lat": 37.5006, "lng": 127.0364}, {"lat": 37.4998, "lng": 127.0301}, "... (실제 선로를 따라가는 점 수십~백여 개)" ] }
+      ]
+    }
+  ]
+}
 ```
+
+`path_type`은 "recommended"/"fastest" 같은 분류값이 아니라 **교통수단 조합 문자열**이다
+(`"subway"` / `"bus"` / `"subway+bus"`). 추천·최단 구분은 `is_recommended`/`is_fastest` 두 불리언으로 본다.
+따릉이(`bike`)는 segment의 mode로 절대 안 온다 — 완전히 별도인 `GET /bike/docks`(B 담당)를 호출해야 함.
 
 ---
 
@@ -149,9 +182,30 @@ API 미확정이라 응답에 `stock: null`로 두고 스텁 처리한다.
   구간 하나). `properties.line_ref`(예: `"2"`, `"신분당"`, `"GTX-A"` — ODsay `lane[].subwayCode`/segment의
   `route_id`와 매칭되는 값), `properties.line_name`, `properties.colour`(실제 노선 색 hex)
 - ⚠️ GeoJSON 좌표 순서는 `[lng, lat]`(경도, 위도) — 우리 서비스의 `{lat, lng}` 순서와 반대라 주의
-- **아직 안 한 것**: `/routes/search` segment의 시작역~끝역 사이에 해당하는 이 노선 데이터의 부분 구간만
-  잘라내는 로직(점-선 투영 + 슬라이싱)은 구현 안 함 — 이건 백엔드가 API로 잘라서 내려줄지, 프론트가 통째로
-  받아서 클라이언트에서 자를지 정해야 함 (§11 참고)
+  (이 원본 GeoJSON을 프론트가 직접 쓸 일은 없음 — 아래 6.2 참고. 백엔드 내부에서만 이 순서 조심하면 됨)
+
+### 6.2 `/routes/search` 응답에 노선 곡선 포함 완료 — 프론트는 이것만 쓰면 됨 (2026-08-19)
+
+**"프론트는 윤상은님 전담" 결정에 따라, 구간 자르기는 전부 백엔드에서 처리해서 내려준다.** 원본 GeoJSON이나
+좌표 계산(점-선 투영)을 프론트가 알거나 다룰 필요가 전혀 없다.
+
+`/routes/search` 응답의 지하철(`mode: "subway"`) segment마다 **`polyline` 필드**가 추가됐다(§5.1 예시 참고):
+
+- 값이 있으면(`[{lat, lng}, {lat, lng}, ...]`, 보통 수십~수백 개) → 이 점들을 순서대로 이어서 그리면 그게
+  시작역~끝역 사이의 **실제 선로 곡선**이다. 카카오맵 Polyline에 좌표 배열 그대로 넣으면 됨.
+  좌표 순서는 우리 서비스 컨벤션 그대로 `{lat, lng}` — GeoJSON의 `[lng, lat]` 순서 걱정 안 해도 됨.
+- 값이 `null`이면 → 매칭 실패(해당 구간이 OSM 데이터에서 300m 이내로 못 찾아짐) 또는 버스/도보 구간.
+  이때는 기존 방식대로 `start`/`end`를 직선(Polyline 두 점)으로 이으면 됨 — 원래 계획하신 방식과 동일.
+- 버스(`mode: "bus"`)는 이번 스프린트에서 대상 아님 — `polyline`이 항상 `null`. 필요하면 나중에 같은 방식으로
+  확장 가능 (OSM `route=bus` 데이터, 아직 안 받아옴).
+
+구현: `backend/app/services/line_geometry.py` — 궁금하면 참고, 몰라도 사용에는 문제없음.
+
+**어디에 더 기록해두면 좋을지**: 이 내용은 `docs/api-contracts/routing.md`(윤상은님 소유, 프론트-백엔드
+계약 문서)에도 그대로 옮겨두는 게 맞다고 판단함 — 그 문서가 "미확정"이라고 표시해둔 항목들(§5.1에서 언급한
+`routes`→`candidates`, `path_type` 의미, `id` 필드 등)의 실제 답이 다 여기 있어서, 그쪽에도 반영돼야 프론트
+작업하실 때 참고하기 편할 것 같음. 다만 그 문서는 윤상은님 브랜치(`feature/routing/mvp-ui-scaffold`)에만
+있어서 A/B가 직접 수정하지 않고 이 내용을 전달하는 방식으로 진행.
 
 ---
 
@@ -276,9 +330,7 @@ X-Forwarded-For(B 담당, nginx가 넘겨주는 헤더 사용). CLAUDE.md §12�
 2. 쿠폰(§3) 진행 여부 — B가 통합 후 시간 되면 진행, 최종 여부는 8/20 오후에 결정
 3. ODsay 호출은 서버의 등록된 IP에서만 허용됨(ODsay LAB "설정"에서 Server IP 등록 필요) — 각자 개발 환경 IP가
    다르면 매번 등록을 바꿔야 함. AWS 배포 시 실제 서버 고정 IP로 재등록 필요 (김재우님 인프라 확정 시 확인)
-4. §6.1 지하철 노선 곡선 데이터(OSM) 통합
-   - (a) **해결됨 (2026-08-19)**: 프론트(카카오맵 연동, Polyline 렌더링 등 화면 코드)는 전부 윤상은님 담당.
-     A/B는 프론트 디렉토리에 직접 코드를 얹지 않고, 데이터/API 형태로만 제공한다.
-   - (b) 남음: 구간 자르기(시작역~끝역 사이만 추출)를 백엔드가 `/routes/search` segment 응답에 미리 잘라서
-     내려줄지(예: `segment.polyline` 필드 추가), 프론트가 전체 노선 GeoJSON을 그대로 받아서 클라이언트에서
-     자를지 — A가 백엔드에서 잘라주는 방향으로 구현 예정(작업 중)
+4. ~~§6.1 지하철 노선 곡선 데이터(OSM) 통합~~ → **해결됨 (2026-08-19).**
+   (a) 프론트(카카오맵 연동, Polyline 렌더링 등 화면 코드)는 전부 윤상은님 담당, A/B는 프론트 디렉토리에
+   직접 코드를 얹지 않음. (b) 구간 자르기는 백엔드가 `/routes/search` segment의 `polyline` 필드로 이미 잘라서
+   내려줌 — §6.2/§5.1 참고. `docs/api-contracts/routing.md`에도 반영 필요(윤상은님 브랜치라 직접 수정 안 함).

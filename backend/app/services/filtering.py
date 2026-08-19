@@ -64,5 +64,6 @@ def select_candidates(candidates: list[ScoredCandidate]) -> tuple[list[dict], bo
             "candidate": e["candidate"],
             "minute_improvement_ratio": 0.0 if ratio == float("inf") else round(ratio, 2),
             "is_recommended": e["candidate"] is recommended,
+            "is_fastest": e["candidate"] is baseline,
         })
     return results, is_same

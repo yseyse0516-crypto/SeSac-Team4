@@ -3,6 +3,7 @@ uvicorn[standard]
 pydantic
 httpx
 python-dotenv
+shapely
 psycopg[binary]
 redis
 pytest

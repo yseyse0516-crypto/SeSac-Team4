@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.schemas.route import Candidate, Coordinate, SearchRequest, SearchResponse, Segment
 from app.services import candidate_log_stub as candidate_log
-from app.services import filtering, matching, scoring
+from app.services import filtering, line_geometry, matching, scoring
 from app.services.odsay_client import OdsayError, OdsayNoCandidateError, call_odsay
 from app.services.odsay_parser import ParsedSegment, fill_walk_coordinates, parse_odsay_result
 
@@ -57,6 +57,14 @@ def search_routes(payload: SearchRequest) -> SearchResponse:
             if seg_score is not None:
                 segment_scores.append((seg.duration_min, seg_score))
 
+            polyline = None
+            if seg.mode == "subway":
+                curve = line_geometry.get_curve(
+                    seg.route_id, seg.start_lat, seg.start_lng, seg.end_lat, seg.end_lng
+                )
+                if curve is not None:
+                    polyline = [Coordinate(lat=lat, lng=lng) for lat, lng in curve]
+
             response_segments.append(
                 Segment(
                     mode=seg.mode,
@@ -69,6 +77,7 @@ def search_routes(payload: SearchRequest) -> SearchResponse:
                     stop_std_id=seg.stop_std_id,
                     route_id=seg.route_id,
                     matched=match.matched,
+                    polyline=polyline,
                 )
             )
 
@@ -88,14 +97,16 @@ def search_routes(payload: SearchRequest) -> SearchResponse:
 
     response_candidates = [
         Candidate(
+            id=i,
             path_type=e["candidate"].path_type,
             total_time_min=e["candidate"].total_time_min,
             congestion_score=e["candidate"].congestion_score,
             minute_improvement_ratio=e["minute_improvement_ratio"],
             is_recommended=e["is_recommended"],
+            is_fastest=e["is_fastest"],
             segments=e["candidate"].segments,
         )
-        for e in enriched
+        for i, e in enumerate(enriched)
     ]
 
     candidate_log.save_candidates(
