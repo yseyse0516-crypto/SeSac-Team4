@@ -4,7 +4,8 @@
 
 ## 시작하기 전에
 
-반드시 **[`CLAUDE.md`](./CLAUDE.md)** 를 먼저 읽으세요. 팀 역할, 외부 API 호출 규칙, 개인정보 원칙, 그리고 **아직 미확정인 두 가지(DB 종류 MySQL vs PostgreSQL, route_request/route_candidate 테이블의 개인정보 원칙 충돌)** 가 정의되어 있습니다.
+반드시 **[`CLAUDE.md`](./CLAUDE.md)** 를 먼저 읽으세요. 팀 역할, 외부 API 호출 규칙, 개인정보 원칙이 정의되어 있습니다.
+백엔드 상세 계획(담당 분담, API 명세, 스코어링 로직 확정값)은 **[`backend.md`](./backend.md)** 참고.
 
 기획 명세서 원문: [`docs/spec/4조_1차MVP_기획명세서2026_08_18.pdf`](./docs/spec) · 구성도(파이프라인·네트워크·ERD): [`docs/architecture/`](./docs/architecture)
 
@@ -14,8 +15,9 @@
 |---|---|---|
 | Frontend | React (Vite) | Next.js 미사용 |
 | Backend | FastAPI (Python) | 요청 처리 서버 + 오프라인 배치(월 1회) 분리 |
-| DB | ⚠️ MySQL 8 (과제 공통 지침) — 명세서 인프라 제안은 PostgreSQL. 팀 확정 후 갱신 | ORM 미사용, 원시 SQL |
-| 캐시 | Redis | ODsay 응답 캐시, 따릉이 재고 캐시 (로그인 세션 없음) |
+| DB | **PostgreSQL** (확정) | **ORM 미사용** — `psycopg`(v3) + 원시 SQL |
+| 캐시 | Redis | ODsay 응답 캐시, 일일 호출 카운터, 따릉이 재고 캐시 (로그인 세션 없음) |
+| 리버스 프록시 | nginx | FastAPI 앞단 |
 | 외부 API | ODsay LAB 경로탐색 API | 요청 1건당 1회 호출 |
 | 배포 | AWS (`tangtang-vpc`, `10.0.0.0/16`) → Kubernetes (2차, 연습용) | |
 
@@ -23,8 +25,8 @@
 
 | 담당 | 이름 | 역할 |
 |---|---|---|
-| 백엔드 | 정종우 | API — 경로 요청, ODsay 연동, 스코어링 |
-| 백엔드 | 김창영 | API — 경로 요청, ODsay 연동, 스코어링 (정종우와 모듈 분담) |
+| 백엔드 | 정종우 | `POST /routes/search` — ODsay 연동, 좌표 매칭, 스코어링, 분당개선 필터링 |
+| 백엔드 | 김창영 | 조회·보조 API(`/routes/{id}`, `/bike/docks`, `/system/meta`, `/health` 등), DB/Redis 인프라 |
 | 프론트엔드 | 윤상은 | 지도, 경로 UI, 화면 |
 | DB·데이터·인프라 | 김재우 | 공공데이터 배치, 가중치 계산, DB 설계, AWS 인프라 |
 
@@ -38,7 +40,7 @@
 
 ### 0. 사전 준비
 - Node.js {버전}, Python {버전}
-- MySQL 8 (또는 팀 확정 시 PostgreSQL), Redis (로컬 설치 또는 Docker Compose)
+- PostgreSQL, Redis, nginx (로컬 설치 또는 Docker Compose)
 - ODsay LAB API 키 (사전 발급 필요)
 
 ```bash
@@ -50,6 +52,7 @@ cp backend/.env.example backend/.env
 ```bash
 docker compose up -d db redis
 ```
+`db` 컨테이너 기동 시 `backend/sql/01_schema.sql` + `02_seed.sql`이 자동 적재되어 개발용 더미 데이터로 바로 스코어링 테스트가 가능합니다.
 
 ### 2. Backend (요청 처리 서버)
 ```bash
@@ -76,9 +79,10 @@ npm run dev
 
 | 변수명 | 설명 |
 |---|---|
-| `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | DB 접속 정보 (MySQL/PostgreSQL 확정 후 드라이버 맞춰 설정) |
-| `REDIS_HOST` / `REDIS_PORT` | Redis 접속 정보 |
+| `DATABASE_URL` (또는 `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD`) | PostgreSQL 접속 정보 (`psycopg` v3) |
+| `REDIS_URL` (또는 `REDIS_HOST`/`REDIS_PORT`) | Redis 접속 정보 |
 | `ODSAY_API_KEY` | ODsay LAB 경로탐색 API 키 |
+| `ODSAY_DAILY_QUOTA` | ODsay 일일 호출 한도 (기본 1000) |
 | `SERVER_VERSION` / `SERVER_NAME` / `SERVER_IP` | 화면 하단 버전 배너 표시용 |
 
 ## 배포 정보
@@ -92,4 +96,4 @@ npm run dev
 
 ## 개인정보 원칙
 
-사용자의 위치 이력·식별정보는 저장하지 않으며, 요청 처리 목적으로만 일시적으로 사용합니다. ERD의 `route_request`/`route_candidate` 테이블은 이 원칙과 충돌 가능성이 있어 팀 합의 전까지 보류합니다. 자세한 내용은 CLAUDE.md §4, §9 참고.
+사용자의 위치 이력·식별정보는 저장하지 않으며, 요청 처리 목적으로만 일시적으로 사용합니다. `route_request`/`route_candidate`에 기록하는 좌표는 소수점 3자리로 절삭(약 100m 격자)해 일반화하고, 사용자 식별자와 결합하지 않습니다 (⚠️ 팀 전체 최종 확정 전 — 자세한 내용은 `backend.md` §8, CLAUDE.md §4 참고).
