@@ -1,0 +1,15 @@
+# 개인 작업 메모 (팀 공용 문서는 backend.md 참고)
+plan.md
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# 환경변수
+.env
+backend/.env
+
+# 에디터
+.vscode/
