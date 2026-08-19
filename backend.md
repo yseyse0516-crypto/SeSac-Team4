@@ -263,6 +263,10 @@ NACL을 도메인 단위로 좁게 잡을 계획이면 Overpass도 명시적으�
 
 ## 7. 핵심 로직 — Q1~Q4 확정 값 + 확인 필요 사항
 
+> 📄 **상세 워크스루는 [`scoring-logic.md`](scoring-logic.md) 참고** — 공식별 예시 계산, 방향
+> 검증(0=쾌적이 실제로 안 뒤집혔는지), 2026-08-19 재검토에서 찾은 버그 2건(문서 불일치 1건
+> +코드 버그 1건, 둘 다 수정 완료)까지 기록해뒀다. 여긴 결정 사항 요약만 남긴다.
+
 시간이 없어 아래 값으로 **일단 진행**한다. 상수는 전부 코드 상단에 분리해서 나중에 바꾸기 쉽게 만든다.
 **정규화 방향은 "0에 가까울수록 쾌적"으로 통일** — 이게 어긋나면 추천이 정확히 거꾸로 나온다.
 
@@ -272,7 +276,7 @@ NACL을 도메인 단위로 좁게 잡을 계획이면 Overpass도 명시적으�
 |---|---|
 | Q1 점수 통합 | 지하철 `min(congestion_pct/150, 1.0)`, 버스 `min(net_onboard/50, 1.0)`<br>경로 점수 = 구간 소요시간 가중평균 |
 | Q2 baseline | ODsay 후보 중 `total_time_min` 최솟값 |
-| Q4 매칭 반경 | 지하철 100m, 버스 50m. 실패 시 `matched: false` + 중립값 0.5 |
+| Q4 매칭 | 지하철: 좌표 100m 반경 매칭. 버스: ~~50m 반경~~ → §7.3에서 ID 직접 매칭(`stop_std_id = localStationID`)으로 변경 확정, 반경 매칭 아예 없음. 실패 시 `matched: false` + 중립값 0.5 |
 
 ### 7.2 Q3 — 정차순번 반영: 완만한 감산으로 최종 확정 (A 단독 결정)
 
@@ -401,14 +405,116 @@ save_candidates와 같이 묶어서 처리하면 될 것 같음. (DB 스키마�
 테스트는 `backend/tests/test_board.py`(10개, 실제 uvicorn 서버 띄워서 curl로도 재검증함).
 `dev_server.py`에도 등록해서 지금 바로 프론트에서 붙여 테스트 가능.
 
-**프론트 전달 필요**: 상은님 화면이 이 API를 쓰려면 `X-Client-Token`을 프론트에서 생성(예:
-`crypto.randomUUID()` 후 localStorage에 저장)해서 작성/수정/삭제 요청마다 헤더로 보내야 함 —
-쿠폰 클레임에서 이미 만든 토큰이 있으면 그거 재사용해도 됨. 이 내용도 `docs/api-contracts/
-routing.md` 쪽에 전달 필요(다른 계약들과 같은 방식으로, 직접 수정은 안 함).
+**⚠️ 업데이트(같은 날 저녁, §12 참고)**: 위 X-Client-Token 방식은 로그인 기능이 추가되면서
+**대체됐다.** 게시판 작성/수정/삭제는 이제 로그인(§12의 JWT)이 필요하고, 닉네임도 매번
+입력하는 대신 가입 닉네임을 자동으로 쓴다. 목록/상세 조회는 여전히 비회원도 가능(공개).
+아래 문단은 옛 방식 기록으로 남겨두고 히스토리 참고용으로만 둔다.
+
+**프론트 전달 필요(갱신됨)**: 상은님 화면은 게시판 글쓰기/수정/삭제 버튼을 눌렀을 때 로그인
+여부를 확인해서, 비로그인 상태면 "로그인이 필요한 서비스입니다" 안내와 함께 회원가입/로그인
+화면으로 유도해야 함 — 백엔드는 `401 {"code": "LOGIN_REQUIRED"}`로 이 상태를 알려준다
+(§12 참고). 이 내용도 `docs/api-contracts/routing.md` 쪽에 전달 필요(직접 수정은 안 함).
 
 ---
 
-## 12. 지금 팀 확인이 필요한 것 (열린 이슈 모음)
+## 12. 로그인/회원 기능 (2026-08-19 저녁 추가)
+
+CLAUDE.md §4/§13은 원래 "1차 MVP엔 회원가입/로그인 없음, 임의로 추가 금지"였다. 이번엔
+팀(사용자) 요청으로 직접 추가하기로 결정 — 기본 서비스(경로 검색)는 여전히 로그인 없이
+그대로 쓸 수 있고, **게시판 작성/수정, 즐겨찾기**처럼 계정에 딸린 기능만 로그인을 요구하는
+방향이다. 비회원이 이런 기능을 누르면 `401 LOGIN_REQUIRED` → 프론트가 "로그인이 필요한
+서비스입니다" + 회원가입 화면 안내로 처리(§11 참고, 게시판에 이미 반영됨).
+
+### 인증 방식 — JWT (B 요청사항 반영)
+
+김창영(B)이 쿠폰 등 다른 라우터에서도 로그인 결과를 바로 쓸 수 있게 아래 4가지를
+요청했고, 전부 반영했다:
+
+1. **공용 Dependency** — `app.services.auth_service.get_current_user_id`. 다른 라우터(쿠폰
+   포함)에서 그대로 가져다 쓰면 됨:
+   ```python
+   from app.services.auth_service import get_current_user_id
+
+   @router.post("/coupons/claim")
+   def claim_coupon(current_user_id: int = Depends(get_current_user_id)):
+       ...
+   ```
+   비회원/만료/위조 토큰은 전부 이 Dependency가 알아서 401 `{"code": "LOGIN_REQUIRED"}`로
+   던진다 — 호출부에서 따로 검증할 것 없음.
+2. **JWT, `Authorization: Bearer <token>` 헤더** — 그대로 채택. 토큰 안에 `user_id`만 담고
+   서명(HS256)만 검증하면 끝나서, **DB/Redis 조회가 전혀 없다.** A/B 파일이 저장소를 공유할
+   필요가 없어진다는 부수 이점도 있음(지금처럼 core/db.py·core/redis.py가 아직 안 붙은
+   상태에서도 서로 독립적으로 진행 가능). 비밀키는 `.env`의 `JWT_SECRET` — 배포 전 반드시
+   교체 필요(`.env.example`에 경고 문구 남겨둠).
+3. **users 테이블 PK** — `id`(정수, 자동증가) 확정. 지금은 프로세스 메모리 카운터로
+   구현했지만 실제 스키마에서도 그대로 `id`가 PK가 된다 — B 쪽 테이블에서 FK로 참조해도 됨.
+4. **쿠폰 조회/받기 정책** — "조회는 비회원도, 받기(claim)만 로그인 필요"는 게시판에 이미
+   적용한 것과 같은 원칙(읽기는 공개, 계정에 남는 행위만 회원전용)이라 그대로 맞는 방향.
+   실제 반영은 B의 `routers/coupon.py`에서 진행 — `get_current_user_id`를 그 라우터의
+   claim 엔드포인트에 붙이기만 하면 됨. 기존 `X-Client-Token`(익명 기기토큰) 기반 중복
+   방지는 `coupon:issued:{user_id}`처럼 user_id 기준으로 바꾸는 걸 권장하지만, 이 파일은
+   B 담당이라 최종 결정/구현은 B가 함.
+
+### 알아두어야 할 트레이드오프
+
+JWT는 서버가 세션 상태를 안 들고 있어서, **로그아웃해도 그 토큰은 만료 전까지 계속
+유효하다**(서버가 강제로 무효화할 방법이 없음). 그래서 만료시간을 24시간으로 짧게 잡았다.
+완전히 막으려면 블록리스트(Redis)가 필요한데, 그러면 결국 공유 저장소가 다시 필요해져서
+JWT를 쓰는 이유가 옅어진다 — 이번 스프린트에서는 과한 대응이라 판단해 로그아웃 API 자체를
+안 만들었다(프론트가 토큰을 지우는 것으로 끝).
+
+### API 명세
+
+| Method | Path | 설명 | 인증 |
+|---|---|---|---|
+| POST | `/api/v1/auth/register` | 회원가입 (`username`, `password`, `nickname`) → 토큰+유저 | 없음 |
+| POST | `/api/v1/auth/login` | 로그인 (`username`, `password`) → 토큰+유저 | 없음 |
+| GET | `/api/v1/auth/me` | 내 정보 조회 | `Authorization: Bearer` 필요 |
+
+`username`은 영문/숫자/`_`만, 3~20자. `password`는 8~100자(bcrypt 해시로만 저장). `email`은
+아예 안 받음 — N-04(개인정보 최소화) 취지와 일관되게 이번 스프린트에 안 쓰는 개인정보는
+처음부터 요구하지 않음.
+
+에러 코드: `USERNAME_TAKEN`(409), `INVALID_CREDENTIALS`(401, 아이디 없음/비번 틀림 구분 안
+함 — 계정 열거 공격 방지), `LOGIN_REQUIRED`(401, 토큰 없음/만료/위조 전부 동일 처리).
+
+### 게시판 변경사항
+
+작성/수정/삭제가 로그인 필요로 바뀌었다(§11 참고). `PostCreate`에서 `nickname` 필드가
+빠졌다 — 이제 로그인한 계정의 닉네임을 자동으로 쓴다.
+
+### 즐겨찾기 (신규 기능)
+
+"즐겨찾기"는 특정 역/정류장이 아니라 **출발지-도착지 조합**을 저장하는 것으로 정의했다
+(예: "집→회사") — `SearchRequest`와 좌표 모양이 같아서 프론트가 그대로 재검색에 쓸 수 있음.
+
+| Method | Path | 설명 |
+|---|---|---|
+| POST | `/api/v1/favorites` | 즐겨찾기 추가 (`label`, `origin`, `destination`) |
+| GET | `/api/v1/favorites` | 내 즐겨찾기 목록 |
+| DELETE | `/api/v1/favorites/{id}` | 삭제 (본인 것만) |
+
+전부 로그인 필요. 본인 것이 아닌 즐겨찾기 삭제 시도는 403 `NOT_FAVORITE_OWNER`.
+
+### DB/인프라 확인 필요 (내일 오전 통합 시)
+
+- `users`(id PK, username UNIQUE, password_hash, nickname, role, created_at), `favorite`
+  (id PK, user_id FK, label, origin_lat/lng, destination_lat/lng, created_at) 테이블이
+  스키마에 없음 — `01_schema.sql`에 추가 필요(김재우님/B 확인).
+- `board_post`도 아직 스키마에 없음(§11에 이미 기록) — 이번에 `owner_user_id`(FK)로 바뀜.
+- 지금은 전부(users/board_post/favorite) 프로세스 메모리 저장 — 재시작하면 사라짐. 실제
+  DB 연동은 내일 오전 A·B 통합 때 함께 처리.
+
+### 구현 위치
+
+`backend/app/schemas/auth.py`, `favorite.py` / `backend/app/services/auth_service.py`,
+`favorite_service.py` / `backend/app/routers/auth.py`, `favorites.py`. 테스트는
+`test_auth.py`(10개), `test_favorites.py`(7개), `test_board.py`(로그인 기반으로 재작성,
+10개) — 전부 `dev_server.py`에도 등록해서 실제 서버로 재검증함.
+
+---
+
+## 13. 지금 팀 확인이 필요한 것 (열린 이슈 모음)
 
 **해결됨**
 - ~~§7.2 Q3 계단식→완만한 감산~~ → A 단독 결정 사항으로 확정 (scoring.py는 A 전담 파일)

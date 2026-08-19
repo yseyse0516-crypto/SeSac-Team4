@@ -6,4 +6,6 @@ python-dotenv
 shapely
 psycopg[binary]
 redis
+bcrypt
+PyJWT
 pytest

@@ -1,23 +1,15 @@
-"""커뮤니티 게시판 CRUD 라우터 (backend.md §12).
+"""커뮤니티 게시판 CRUD 라우터 (backend.md §11/§12).
 
-로그인이 없어서(CLAUDE.md §4) X-Client-Token(프론트가 생성해 들고 있는 UUID — 쿠폰
-기능과 동일한 값을 재사용해도 됨)으로 작성자를 식별한다. 작성 시 헤더가 없으면 400,
-수정/삭제 시 글 작성자의 토큰과 다르면 403.
+목록/상세 조회는 비회원도 가능(공개 게시판). 작성/수정/삭제는 로그인 필요 —
+`auth_service.get_current_user`가 401 LOGIN_REQUIRED를 던지면 프론트가 "로그인이
+필요한 서비스입니다" + 회원가입 화면 안내로 처리한다.
 """
-from typing import Optional
-
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.schemas.board import PostCreate, PostListOut, PostOut, PostUpdate
-from app.services import board_service
+from app.services import auth_service, board_service
 
 router = APIRouter(prefix="/api/v1/board", tags=["board"])
-
-
-def _require_client_token(x_client_token: Optional[str]) -> str:
-    if not x_client_token:
-        raise HTTPException(status_code=400, detail={"code": "MISSING_CLIENT_TOKEN"})
-    return x_client_token
 
 
 def _to_post_out(post: board_service.Post) -> PostOut:
@@ -32,10 +24,10 @@ def _to_post_out(post: board_service.Post) -> PostOut:
 
 @router.post("/posts", response_model=PostOut, status_code=201)
 def create_post(
-    payload: PostCreate, x_client_token: Optional[str] = Header(default=None)
+    payload: PostCreate,
+    current_user: auth_service.User = Depends(auth_service.get_current_user),
 ) -> PostOut:
-    token = _require_client_token(x_client_token)
-    post = board_service.create_post(payload.nickname, payload.content, token)
+    post = board_service.create_post(current_user.nickname, payload.content, current_user.id)
     return _to_post_out(post)
 
 
@@ -60,11 +52,10 @@ def get_post(post_id: int) -> PostOut:
 def update_post(
     post_id: int,
     payload: PostUpdate,
-    x_client_token: Optional[str] = Header(default=None),
+    current_user: auth_service.User = Depends(auth_service.get_current_user),
 ) -> PostOut:
-    token = _require_client_token(x_client_token)
     try:
-        post = board_service.update_post(post_id, payload.content, token)
+        post = board_service.update_post(post_id, payload.content, current_user.id)
     except board_service.PostNotFoundError:
         raise HTTPException(status_code=404, detail={"code": "POST_NOT_FOUND"})
     except board_service.NotPostOwnerError:
@@ -73,10 +64,12 @@ def update_post(
 
 
 @router.delete("/posts/{post_id}", status_code=204)
-def delete_post(post_id: int, x_client_token: Optional[str] = Header(default=None)) -> None:
-    token = _require_client_token(x_client_token)
+def delete_post(
+    post_id: int,
+    current_user: auth_service.User = Depends(auth_service.get_current_user),
+) -> None:
     try:
-        board_service.delete_post(post_id, token)
+        board_service.delete_post(post_id, current_user.id)
     except board_service.PostNotFoundError:
         raise HTTPException(status_code=404, detail={"code": "POST_NOT_FOUND"})
     except board_service.NotPostOwnerError:

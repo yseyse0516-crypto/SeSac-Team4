@@ -71,6 +71,18 @@ def test_same_time_but_less_congested_is_always_eligible():
     assert ratio == float("inf")
 
 
+def test_infinite_ratio_displays_congestion_improvement_not_zero():
+    # extra_time<=0인데 더 쾌적한 경우 실제 ratio는 inf지만, 응답 JSON엔 Infinity를 그대로
+    # 못 실어서 대체값이 필요하다 — 0.0을 쓰면 "개선 없음"처럼 보여 오해를 사므로, 대신
+    # congestion_score 개선폭(항상 유한하고 0보다 큼)을 보여줘야 한다.
+    baseline = _candidate(60, 0.5)
+    equally_fast_more_comfortable = _candidate(60, 0.2)
+    results, _ = select_candidates([baseline, equally_fast_more_comfortable])
+    result = next(r for r in results if r["candidate"] is equally_fast_more_comfortable)
+    assert result["minute_improvement_ratio"] == pytest.approx(0.3)
+    assert result["minute_improvement_ratio"] != 0.0
+
+
 def test_empty_candidate_list():
     results, is_same = select_candidates([])
     assert results == []

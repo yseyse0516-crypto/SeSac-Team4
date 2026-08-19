@@ -60,9 +60,17 @@ def select_candidates(candidates: list[ScoredCandidate]) -> tuple[list[dict], bo
     results = []
     for e in enriched:
         ratio = e["ratio"]
+        if ratio == float("inf"):
+            # extra_time<=0인데 더 쾌적하기까지 한 경우 — "분당" 개념 자체가 없다(시간을
+            # 안 썼으니 나눌 수가 없음). 0.0을 쓰면 "개선 없음"처럼 보여서 실제로는 가장 좋은
+            # 케이스인데 오해를 산다 — 대신 congestion_score 개선폭 자체를 보여준다(스케일은
+            # "분당"이 아니지만 0이 아닌 양수라 최소한 "더 쾌적하다"는 방향은 정확히 전달됨).
+            display_ratio = round(baseline.congestion_score - e["candidate"].congestion_score, 2)
+        else:
+            display_ratio = round(ratio, 2)
         results.append({
             "candidate": e["candidate"],
-            "minute_improvement_ratio": 0.0 if ratio == float("inf") else round(ratio, 2),
+            "minute_improvement_ratio": display_ratio,
             "is_recommended": e["candidate"] is recommended,
             "is_fastest": e["candidate"] is baseline,
         })
