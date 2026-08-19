@@ -7,6 +7,16 @@ import type { RouteSearchRequest, RouteSearchResponse } from "../types/routing";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
+// backend.md/frontend-plan.md §3.3에 정의된 에러코드(400/404/429/502)를 화면에서 구분해서
+// 처리할 수 있도록 status를 들고 있는 에러. 화면 쪽 매핑은 RouteSearchPage.tsx 참고.
+export class RouteSearchError extends Error {
+  status: number;
+  constructor(status: number) {
+    super(`routes search failed: ${status}`);
+    this.status = status;
+  }
+}
+
 const MOCK_RESPONSE: RouteSearchResponse = {
   routes: [
     {
@@ -118,7 +128,7 @@ export async function fetchRoutes(
     body: JSON.stringify(request),
   });
   if (!res.ok) {
-    throw new Error(`routes search failed: ${res.status}`);
+    throw new RouteSearchError(res.status);
   }
   return res.json();
 }
