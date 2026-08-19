@@ -1,0 +1,43 @@
+/* "텅텅" 디자인 토큰 — Cool & Clear 컨셉 (docs/spec/ui-ux-guide.md §1 기준).
+   화면 컴포넌트들은 색상을 직접 쓰지 않고 이 변수(var(--bg) 등)만 참조한다.
+   나중에 팀이 색을 바꾸기로 하면 이 파일 한 곳만 고치면 전체 화면에 반영된다. */
+
+:root {
+  --bg: #f7f9fb; /* 쿨 그레이 배경 */
+  --surface: #ffffff; /* 카드/입력 표면 */
+  --surface-muted: #eef2f7; /* 살짝 톤 낮은 표면 (즐겨찾기 칩 등) */
+
+  --primary: #3d7bff; /* 시원한 블루 (강조용, 제한적으로 사용) */
+  --primary-hover: #2f66db;
+  --secondary: #e6ecf5; /* 무채도 블루 그레이 (보조 버튼) */
+
+  --text: #1a1d29; /* 거의 블랙에 가까운 뉴트럴 */
+  --text-sub: #8b93a7; /* 뉴트럴 그레이 보조 텍스트 */
+  --border: #e2e6ee; /* 연한 그레이 보더 */
+
+  /* 4단계 혼잡도 색 — 브랜드 primary와 분리된 별도 팔레트 (상태 정보 전용) */
+  --level-calm: #1fb987; /* 여유 */
+  --level-normal: #f0b429; /* 보통 */
+  --level-busy: #f2793a; /* 혼잡 */
+  --level-packed: #e5484d; /* 매우 혼잡 */
+
+  --font-sans: "Pretendard", -apple-system, "Segoe UI", "Noto Sans KR", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace; /* 숫자/데이터 레이블용 폰트 */
+
+  --radius-card: 16px;
+  --radius-control: 10px;
+  --radius-chip: 999px;
+  --shadow-card: 0 1px 3px rgba(26, 29, 41, 0.05), 0 6px 16px rgba(26, 29, 41, 0.05);
+
+  /* 지하철 노선 컬러 (필요한 만큼 추가) */
+  --line-1: #0d3692;
+  --line-2: #33a23d;
+  --line-7: #747f00;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+}

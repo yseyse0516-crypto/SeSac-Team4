@@ -1,0 +1,69 @@
+/* 상단 Front/API 버전 바 + 하단 서버/클라이언트 정보 바 (CLAUDE.md §12). */
+
+.version-topbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-sans);
+}
+
+.version-topbar__pill {
+  background: var(--secondary);
+  color: var(--text);
+  border-radius: var(--radius-chip);
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.server-info-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  font-family: var(--font-sans);
+  overflow-x: auto;
+}
+
+.server-info-bar__item {
+  flex: 1 1 130px;
+  min-width: 130px;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 6px 10px;
+}
+
+.server-info-bar__label {
+  display: block;
+  font-size: 10px;
+  color: var(--text-sub);
+  margin-bottom: 2px;
+}
+
+.server-info-bar__value {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
