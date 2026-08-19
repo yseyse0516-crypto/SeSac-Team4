@@ -143,9 +143,237 @@ Front version, Server version, 서버명, 서버 IP, 클라이언트 IP, X-Forwa
 ## 13. Claude에게 주는 전역 지시사항
 
 - 항상 §5 역할 표에 명시된 디렉토리 범위 안에서만 파일을 생성/수정한다.
-- **§4의 개인정보 원칙을 최우선으로 지킨다.** `route_request`/`route_candidate`에 좌표를 저장할 땐 반드시 소수점 3자리로 절삭하고, 사용자 식별자와 결합하지 않는다 (2026-08-19 팀 합의 완료).
+- **§4의 개인정보 원칙을 최우선으로 지킨다.** route_request/route_candidate 테이블은 좌표를 소수점 3자리로 
+절삭 저장하는 방식으로 팀 합의 완료. 구현해도 된다.
+(N-04 대응: 약 100m 격자 → 개인 재식별 불가, 사용자 식별자 없음)
 - **§3의 외부 API 호출 규칙을 절대 위반하지 않는다.** ODsay는 요청당 1회만, 국토교통부 API·서울교통공사/서울시 파일은 오프라인 배치에서만 사용한다.
 - DB는 PostgreSQL을 사용하되 ORM은 쓰지 않는다. `psycopg`(v3) + 원시 SQL + 파라미터 바인딩 (2026-08-19 최종 확정, §2 참고).
 - React 세팅 시 Next.js를 사용하지 않는다.
 - 회원가입/로그인 등 명세서에 없는 기능을 임의로 추가하지 않는다. 필요하다고 판단되면 먼저 사용자에게 확인한다.
 - 새 화면/API를 만들 때는 `docs/api-contracts/{module}.md`에 계약이 있는지 먼저 확인한다.
+
+
+---
+
+## [B 작업 컨텍스트] 2026-08-19 기준 — Claude Code 시작 시 이 섹션부터 읽을 것
+
+> 이 섹션은 백엔드 B(김창영)가 Claude Code에서 작업을 이어가기 위한 컨텍스트다.
+> 위 섹션들(§1~§13)이 프로젝트 전체 규칙이고, 이 섹션은 현재 개발 상태와 B의 작업 범위를 추가로 정의한다.
+
+---
+
+### 현재 상태
+
+- 마감: **2026-08-20(목) 16:00 코드 동결**
+- 레포: `SeSac-Team4` private, `zer0` 브랜치에서 작업
+- 백엔드 A(정종우)와 분담 확정 — 라우터 단위 분리, 공용 파일은 B가 먼저 올림
+- 레포에는 현재 `CLAUDE.md`, `README.md`만 있음
+
+---
+
+### B 담당 파일 (이것만 만든다)
+
+```
+backend/
+├── app/
+│   ├── main.py                   공용 — B가 먼저 만들고 이후 건드리지 않음
+│   ├── core/
+│   │   ├── db.py                 공용 — psycopg 커넥션 풀
+│   │   └── redis.py              공용 — Redis 클라이언트
+│   ├── routers/
+│   │   ├── system.py             GET /api/v1/system/meta, GET /health, GET /admin/batch/latest
+│   │   ├── result.py             GET /api/v1/routes/{request_id}
+│   │   ├── bike.py               GET /api/v1/bike/docks (따릉이 F-04)
+│   │   └── coupon.py             POST /api/v1/coupons/claim (조건부)
+│   ├── services/
+│   │   └── candidate_log.py      save_candidates(), save_request() — A가 호출하는 함수
+│   └── schemas/
+│       ├── result.py
+│       ├── bike.py
+│       └── system.py
+└── sql/
+    ├── 01_schema.sql             PostgreSQL DDL
+    └── 02_seed.sql               개발용 더미 데이터
+docker-compose.yml                PostgreSQL 16 + Redis 7
+backend/.env.example
+```
+
+### A 담당 파일 (절대 건드리지 않는다)
+
+```
+backend/app/routers/search.py
+backend/app/services/odsay.py
+backend/app/services/scoring.py
+```
+
+---
+
+### 확정된 기술 결정사항
+
+| 항목 | 결정값 | 이유 |
+|---|---|---|
+| DB | PostgreSQL 16 | 핸드오프 확정 |
+| ORM | **금지** | CLAUDE.md §2 — psycopg(v3) + raw SQL |
+| PG 전용 문법 | **사용 금지** | JSONB/ARRAY/RETURNING 쓰면 MySQL 되돌릴 때 재작성 필요 |
+| 정규화 방향 | **0에 가까울수록 쾌적** | A와 반드시 통일 — 어긋나면 추천이 반대로 나옴 |
+| N-04 처리 | 좌표 소수점 3자리 절삭 저장 | 약 100m 격자 → 개인 재식별 불가 |
+| ORM 대신 | psycopg(v3) 직접 사용 | `pip install psycopg[binary]` |
+| include_router 순서 | A 먼저, B 나중 | 충돌 시 해결 즉시 가능 |
+
+---
+
+### 스코어링 공식 (A가 구현, B는 참고만)
+
+Q1~Q4는 아래 값으로 확정. 전부 상수로 분리돼 있어 변경 비용 없음.
+
+```python
+# Q1: 점수 통합 (0에 가까울수록 쾌적)
+subway_score = min(congestion_pct / 150, 1.0)
+bus_score    = min(net_onboard / 50, 1.0)
+# 경로 점수 = 구간별 소요시간 가중평균
+
+# Q2: baseline = ODsay 후보 중 total_time_min 최솟값
+
+# Q3: 정차순번 감산 계수 (필터 아님)
+if stop_sequence <= 3:
+    score *= 0.7
+
+# Q4: 매칭 반경
+# 지하철 100m, 버스 50m
+# 실패 시 matched=False, 중립값 0.5 사용
+```
+
+---
+
+### A와의 접점 — save_candidates
+
+B가 제공하고 A가 `/routes/search` 마지막 줄에서 호출하는 함수.
+**내일(8/20) 오전 통합 시점에 연결.**
+
+```python
+# backend/app/services/candidate_log.py
+
+def save_request(origin_lat, origin_lng, dest_lat, dest_lng) -> int:
+    """route_request INSERT → request_id 반환. 좌표는 소수점 3자리 절삭."""
+
+def save_candidates(request_id: int, candidates: list[dict]) -> None:
+    """route_candidate 일괄 INSERT.
+    candidates 각 항목 필수 키:
+      path_type, total_time_min, congestion_score,
+      minute_improvement_ratio, is_recommended
+    """
+```
+
+---
+
+### API 명세 (B 담당)
+
+#### GET /api/v1/system/meta
+과제 필수 표시 6개. Nginx의 X-Forwarded-For를 읽어야 하므로 `request.headers` 사용.
+
+```json
+{
+  "front_version": "0.1.0",
+  "server_version": "0.1.0",
+  "server_name": "tangtang-api01",
+  "server_ip": "10.0.20.11",
+  "client_ip": "1.2.3.4",
+  "x_forwarded_for": "1.2.3.4, 10.0.0.5"
+}
+```
+
+#### GET /api/v1/health
+DB + Redis 핑 + 최신 batch_run 상태 포함.
+
+```json
+{
+  "status": "ok",
+  "db": "ok",
+  "redis": "ok",
+  "latest_batch": { "run_month": "2026-08", "status": "success", "finished_at": "..." }
+}
+```
+
+#### GET /api/v1/routes/{request_id}
+route_request + route_candidate 조회. A의 `/search`가 저장한 데이터를 읽는다.
+
+#### GET /api/v1/bike/docks
+따릉이 F-04. hub_type=STATION|BUS_STOP, hub_id, max_distance(m) 쿼리파라미터.
+dock_hub_distance 테이블 조회. 실시간 재고(F-05)는 `stock: null` 스텁.
+
+```json
+{
+  "docks": [
+    { "dock_id": 1, "dock_name": "강남역 2번출구", "lat": 37.498, "lng": 127.027,
+      "distance_m": 120, "stock": null }
+  ]
+}
+```
+
+#### POST /api/v1/coupons/claim (조건부 — 통합 끝나고 여유 있으면)
+X-Client-Token 헤더로 식별(브라우저가 생성한 UUID). Redis INCR 원자적 순번.
+
+```python
+# Redis 키 구조
+"coupon:count"          # INCR 원자 카운터
+"coupon:issued:{token}" # SET NX 중복 차단
+```
+
+---
+
+### 스코프 결정사항
+
+| 항목 | 결정 |
+|---|---|
+| 게시판 CRUD | **제외** — 서비스 서사와 무관, 프론트 부담 증가 |
+| 따릉이 대여소 통합 (F-04) | **필수 포함** — dock_hub_distance 조회, 외부 API 없음 |
+| 따릉이 실시간 재고 (F-05) | **스텁** — API 미확정, 명세서 §10 1차 범위 밖 |
+| 비교 기능 | **A의 /search 안에 포함** — 별도 API 불필요 |
+| 쿠폰 선착순 | **조건부** — 통합 완료 후 여유 있으면 B가 진행 |
+
+---
+
+### 오늘(8/19) B 작업 순서
+
+지금 당장 시작 가능한 것 (A 답변 불필요):
+
+1. `sql/01_schema.sql` — ERD §8 기준
+2. `sql/02_seed.sql` — 강남·신도림·성수·신답 등 5~6역 더미
+3. `docker-compose.yml`
+4. `backend/.env.example`
+5. `backend/app/core/db.py`
+6. `backend/app/core/redis.py`
+7. `backend/app/main.py`
+8. `GET /api/v1/health`
+9. `GET /api/v1/system/meta`
+10. `GET /api/v1/routes/{request_id}` (골격만, save_candidates 붙기 전)
+11. `GET /api/v1/bike/docks`
+12. `backend/app/services/candidate_log.py` — 시그니처 + 구현
+
+A 답변 온 후 확인:
+- 공용 파일(main.py, core/*) 중복 여부
+- ODsay 응답에 정류장 좌표 포함 여부
+- segments 좌표 포함 형식 최종 확인
+
+---
+
+### 내일(8/20) 일정
+
+| 시간 | 작업 |
+|---|---|
+| 오전 | A와 통합 준비 — save_candidates 연결, 실제 가중치 데이터 확인 |
+| 12시 | **A·B 통합 — /routes/search ↔ save_candidates 연결** |
+| 오후 | 프론트 연동, 에러 처리, 시연 좌표 튜닝 |
+| **16시** | **코드 동결** |
+| 이후 | 배포, README 갱신, 발표 데모 리허설 |
+
+---
+
+### 시연 기본 좌표 (발표용)
+
+명세서 §4에서 차이가 검증된 구간:
+- 출발: 래미안위브아파트 `lat=37.5012, lng=127.0396`
+- 도착: 독산사거리 `lat=37.4784, lng=126.8874`
+- 출발시간: `2026-08-21T08:30:00+09:00`
+
+이 좌표로 테스트하면 최속 경로(68분)와 추천 경로(74분)가 확실히 갈라짐.
