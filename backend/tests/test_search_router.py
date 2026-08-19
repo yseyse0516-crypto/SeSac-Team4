@@ -4,10 +4,12 @@ main.py는 B 담당이라 여기선 테스트 전용으로 라우터만 얹은 �
 ODSAY_API_KEY가 없는 상태이므로 odsay_client가 자동으로 fixture(샘플 응답)를 사용한다 —
 실제 키가 들어오면 이 테스트는 그대로 두고 call_odsay()의 실호출 경로만 별도 검증하면 된다.
 """
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.routers.search import router
+from app.services import line_geometry
 
 app = FastAPI()
 app.include_router(router)
@@ -17,6 +19,17 @@ REQUEST_BODY = {
     "origin": {"lat": 37.5012, "lng": 127.0396},
     "destination": {"lat": 37.4784, "lng": 126.8874},
 }
+
+
+@pytest.fixture(autouse=True)
+def _stub_bus_curve_lookup(monkeypatch):
+    """get_bus_curve()가 실제 Overpass를 호출하지 않게 막는다 — 이 파일은 라우터 동작을
+    검증하는 것이라 외부망 호출까지 태울 필요가 없다(느리고 인터넷 상태에 좌우됨).
+    line_geometry 자체의 캐싱/폴백 동작은 test_line_geometry.py에서 모킹으로 검증함."""
+    line_geometry._bus_curve_cache.clear()
+    monkeypatch.setattr(line_geometry, "_fetch_bus_line", lambda route_ref: [])
+    yield
+    line_geometry._bus_curve_cache.clear()
 
 
 def test_search_returns_200_with_candidates():

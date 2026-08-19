@@ -64,6 +64,12 @@ def search_routes(payload: SearchRequest) -> SearchResponse:
                 )
                 if curve is not None:
                     polyline = [Coordinate(lat=lat, lng=lng) for lat, lng in curve]
+            elif seg.mode == "bus":
+                curve = line_geometry.get_bus_curve(
+                    seg.route_id, seg.start_lat, seg.start_lng, seg.end_lat, seg.end_lng
+                )
+                if curve is not None:
+                    polyline = [Coordinate(lat=lat, lng=lng) for lat, lng in curve]
 
             response_segments.append(
                 Segment(

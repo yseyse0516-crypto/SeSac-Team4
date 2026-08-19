@@ -1,8 +1,9 @@
 """⚠️ 임시 개발용 서버 — B(김창영)의 main.py가 올라오면 이 파일은 지운다.
 
 main.py/core/*가 아직 없어서 프론트가 테스트할 실제 서버가 없는 상태를 임시로 메우는
-용도다. DB/Redis 없이도 동작한다 (candidate_log_stub이 아무것도 저장하지 않는 no-op).
-/routes/search 하나만 살아있고, 나머지 엔드포인트(system/meta, bike/docks 등)는
+용도다. DB/Redis 없이도 동작한다 (candidate_log_stub이 아무것도 저장하지 않는 no-op,
+board_service는 프로세스 메모리에 저장 — backend.md §12).
+/routes/search, /board/posts만 살아있고, 나머지 엔드포인트(system/meta, bike/docks 등)는
 B 담당이라 여기 없다 — 없는 걸 있는 척 가짜로 만들지 않았다.
 
 실행:
@@ -17,6 +18,7 @@ load_dotenv()  # backend/.env (cwd가 backend/일 때 자동으로 찾음)
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.routers.board import router as board_router
 from app.routers.search import router as search_router
 
 app = FastAPI(title="TangTang API (dev, 임시)")
@@ -31,6 +33,7 @@ app.add_middleware(
 )
 
 app.include_router(search_router)
+app.include_router(board_router)
 
 
 @app.get("/health")
