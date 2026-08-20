@@ -200,6 +200,13 @@ CLAUDE.md §13(구현 보류) vs 핸드오프 §3(담당 업무)이 충돌하던
 구현 확정**: 좌표를 소수점 3자리로 절삭 저장(약 100m 격자)하고, N-04 문구를 "요청 좌표는 일반화하여 저장하며
 사용자 식별자와 결합하지 않는다"로 수정. CLAUDE.md §4/§9/§13에 반영 완료.
 
+**[2026-08-20 갱신, 백엔드 B]** 위 절삭 저장안을 다시 검토해 Postgres 테이블(`route_request`/
+`route_candidate`) 자체를 없애고 Redis TTL(`route:request:{id}`, 1시간)로 전환했다. `favorites`가
+"사용자가 다시 보고 싶어하는 결과"를 이미 영구 보관(`route_snapshot` JSONB)으로 전담하고 있어서,
+이 두 테이블은 애초에 영구 저장될 이유가 없었다는 판단 — 좌표도 절삭 없이 저장하지 않는다. Postgres는
+그대로 메인 DB이고(마스터/가중치/`users`/`board_post`/`coupon` 무관), `GET /routes/{request_id}`
+응답 스키마·A의 `save_candidates` 호출 인터페이스는 그대로다. 상세: `docs/decisions/backend-b.md` 4번.
+
 `/system/meta` 필수 표시 항목은 **6개로 확정**: Front version, Server version, 서버명, 서버 IP, 클라이언트 IP,
 X-Forwarded-For(B 담당, nginx가 넘겨주는 헤더 사용). CLAUDE.md §12는 4개만 명시하고 있어 갱신 필요.
 
