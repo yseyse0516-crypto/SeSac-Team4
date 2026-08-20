@@ -11,6 +11,14 @@ ODSAY_API_KEY가 없는 상태이므로 odsay_client가 자동으로 fixture(샘
 그 역/정류장에 맞는 최소한의 실제 데이터를 직접 심어둔다(_real_weight_fixture).
 전체 배치(app/batch/run_batch.py)를 매 테스트 실행마다 돌리기엔 느려서, 이 두
 테스트가 필요로 하는 딱 그만큼만 넣고 끝나면 지운다.
+
+⚠️ 답십리/여의도/118000070은 odsay_sample_response.json에 맞춰 일부러 고른
+"실제" 값이라, 누군가 이미 진짜 배치(python -m app.batch.run_batch)를 돌려둔
+DB에서는 이 station/bus_stop 행이 이미 존재한다 — 그대로 INSERT하면
+UniqueViolation이 난다. 그래서 먼저 존재 여부를 확인하고, 이미 있으면 그 행을
+재사용(테어다운에서 지우지 않음)하고, 없으면 새로 만든다(테어다운에서 지움).
+station_weight/bus_weight/batch_run은 이 fixture가 매번 새로 발급받는 batch_id에
+묶여 있어 실제 배치 데이터와 절대 충돌하지 않는다.
 """
 from datetime import datetime
 
@@ -49,39 +57,59 @@ def _stub_bus_curve_lookup(monkeypatch):
     line_geometry._bus_curve_cache.clear()
 
 
+def _get_or_create_station(cur, spec):
+    """(line_name, station_no) 행이 이미 있으면 재사용, 없으면 새로 만든다.
+    반환값: (station_id, 이 fixture가 새로 만들었는가)."""
+    cur.execute(
+        "SELECT station_id FROM station WHERE line_name = %s AND station_no = %s",
+        (spec["line_name"], spec["station_no"]),
+    )
+    row = cur.fetchone()
+    if row is not None:
+        return row["station_id"], False
+
+    cur.execute(
+        "INSERT INTO station (station_name, line_name, station_no, lat, lng) "
+        "VALUES (%(name)s, %(line_name)s, %(station_no)s, %(lat)s, %(lng)s)",
+        spec,
+    )
+    cur.execute("SELECT lastval() AS id")
+    return cur.fetchone()["id"], True
+
+
+def _get_or_create_bus_stop(cur, stop_std_id, name, lat, lng):
+    """stop_std_id 행이 이미 있으면 재사용, 없으면 새로 만든다.
+    반환값: (stop_id, 이 fixture가 새로 만들었는가)."""
+    cur.execute("SELECT stop_id FROM bus_stop WHERE stop_std_id = %s", (stop_std_id,))
+    row = cur.fetchone()
+    if row is not None:
+        return row["stop_id"], False
+
+    cur.execute(
+        "INSERT INTO bus_stop (stop_std_id, stop_name, lat, lng) VALUES (%s, %s, %s, %s)",
+        (stop_std_id, name, lat, lng),
+    )
+    cur.execute("SELECT lastval() AS id")
+    return cur.fetchone()["id"], True
+
+
 @pytest.fixture(autouse=True)
 def _real_weight_fixture():
     """search.py가 실제 DB를 조회하므로, 이 파일이 검증하려는 역/정류장에 맞는
-    최소한의 station/bus_stop/station_weight/bus_weight 행을 직접 심고 테스트가
-    끝나면 지운다. time_slot/dow는 지금(now()) 기준으로 계산해 search.py가 요청
-    시점에 실제로 조회할 값과 맞춘다(departure_time 미지정 시 now() 사용 — search.py
-    참고)."""
+    최소한의 station/bus_stop/station_weight/bus_weight 행을 확보하고, 이 fixture가
+    직접 만든 행만 테스트 후 지운다(이미 실제 배치가 만들어둔 행은 그대로 둔다).
+    time_slot/dow는 지금(now()) 기준으로 계산해 search.py가 요청 시점에 실제로
+    조회할 값과 맞춘다(departure_time 미지정 시 now() 사용 — search.py 참고)."""
     dt = datetime.now()
     time_slot = weight_repository.time_slot_for(dt)
     dow = dt.weekday()
 
     with db.get_cursor() as cur:
-        cur.execute(
-            "INSERT INTO station (station_name, line_name, station_no, lat, lng) "
-            "VALUES (%(name)s, %(line_name)s, %(station_no)s, %(lat)s, %(lng)s)",
-            _DAPSIMNI,
+        dapsimni_id, dapsimni_created = _get_or_create_station(cur, _DAPSIMNI)
+        _yeouido_id, yeouido_created = _get_or_create_station(cur, _YEOUIDO)
+        bus_stop_id, bus_stop_created = _get_or_create_bus_stop(
+            cur, _BUS_STOP_STD_ID, "여의도역6번출구", 37.520631, 126.924843
         )
-        cur.execute("SELECT lastval() AS id")
-        dapsimni_id = cur.fetchone()["id"]
-
-        cur.execute(
-            "INSERT INTO station (station_name, line_name, station_no, lat, lng) "
-            "VALUES (%(name)s, %(line_name)s, %(station_no)s, %(lat)s, %(lng)s)",
-            _YEOUIDO,
-        )
-
-        cur.execute(
-            "INSERT INTO bus_stop (stop_std_id, stop_name, lat, lng) "
-            "VALUES (%s, %s, %s, %s)",
-            (_BUS_STOP_STD_ID, "여의도역6번출구", 37.520631, 126.924843),
-        )
-        cur.execute("SELECT lastval() AS id")
-        bus_stop_id = cur.fetchone()["id"]
 
         cur.execute(
             "INSERT INTO batch_run (run_month, status, started_at, finished_at, note) "
@@ -106,6 +134,8 @@ def _real_weight_fixture():
     yield
 
     with db.get_cursor() as cur:
+        # station_weight/bus_weight/batch_run은 이 fixture가 새로 발급받은 batch_id에만
+        # 묶여 있으니 실제 배치 데이터와 무관하게 항상 안전하게 지운다.
         cur.execute(
             "DELETE FROM station_weight WHERE station_id = %s AND batch_id = %s",
             (dapsimni_id, batch_id),
@@ -115,11 +145,21 @@ def _real_weight_fixture():
             (bus_stop_id, batch_id),
         )
         cur.execute("DELETE FROM batch_run WHERE batch_id = %s", (batch_id,))
-        cur.execute("DELETE FROM bus_stop WHERE stop_std_id = %s", (_BUS_STOP_STD_ID,))
-        cur.execute(
-            "DELETE FROM station WHERE line_name = %s AND station_no IN (%s, %s)",
-            (_DAPSIMNI["line_name"], _DAPSIMNI["station_no"], _YEOUIDO["station_no"]),
-        )
+
+        # station/bus_stop은 이 fixture가 직접 만든 경우에만 지운다 — 이미 실제
+        # 배치가 만들어둔 행이면 그대로 둔다(다른 테스트/실제 데이터를 건드리지 않음).
+        if bus_stop_created:
+            cur.execute("DELETE FROM bus_stop WHERE stop_std_id = %s", (_BUS_STOP_STD_ID,))
+        if dapsimni_created:
+            cur.execute(
+                "DELETE FROM station WHERE line_name = %s AND station_no = %s",
+                (_DAPSIMNI["line_name"], _DAPSIMNI["station_no"]),
+            )
+        if yeouido_created:
+            cur.execute(
+                "DELETE FROM station WHERE line_name = %s AND station_no = %s",
+                (_YEOUIDO["line_name"], _YEOUIDO["station_no"]),
+            )
 
 
 def test_search_returns_200_with_candidates():
