@@ -102,6 +102,33 @@ def test_bus_curve_without_route_ref_returns_none():
     assert line_geometry.get_bus_curve(None, 37.52, 126.92, 37.53, 126.94) is None
 
 
+def test_overpass_call_uses_short_connect_timeout_separate_from_read(monkeypatch):
+    """2026-08-20 프론트 리포트: connect/read를 분리 안 하면 Overpass 서버 연결 자체가
+    안 되는 상황에서 30초씩 허비하고서야 폴백된다(버스 구간 여러 개면 누적돼서 100초+).
+    connect는 짧게(5초) 실패시키고 read만 기존처럼 넉넉하게(30초) 유지해야 한다."""
+    captured = {}
+
+    class _FakeResponse:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"elements": []}
+
+    def fake_post(url, data=None, timeout=None):
+        captured["timeout"] = timeout
+        return _FakeResponse()
+
+    monkeypatch.setattr(line_geometry.httpx, "post", fake_post)
+
+    line_geometry._fetch_bus_line("504")
+
+    timeout = captured["timeout"]
+    assert isinstance(timeout, line_geometry.httpx.Timeout)
+    assert timeout.connect == 5.0, "연결 자체가 안 되면 몇 초 안에 빨리 실패해야 함"
+    assert timeout.read == 30.0, "연결된 뒤 쿼리 계산이 오래 걸리는 정상 케이스는 계속 허용"
+
+
 def test_bus_curve_network_failure_falls_back_to_none_and_caches_empty(monkeypatch):
     calls = []
 

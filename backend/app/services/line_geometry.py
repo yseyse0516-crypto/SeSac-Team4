@@ -97,14 +97,24 @@ def get_curve(
 
 def _fetch_bus_line(route_ref: str) -> list:
     """Overpass에서 route_ref(예: "504")번 버스 노선을 실시간으로 가져와 병합한다.
-    실패하면 예외를 던진다 — 캐싱/폴백은 호출부(get_bus_curve)에서 처리한다."""
+    실패하면 예외를 던진다 — 캐싱/폴백은 호출부(get_bus_curve)에서 처리한다.
+
+    ⚠️ 2026-08-20 프론트 쪽 리포트로 발견: connect/read 타임아웃을 하나로 뭉쳐서 30초를
+    주고 있었던 탓에, Overpass 서버에 연결 자체가 안 되는 네트워크 환경에서는(공유
+    Overpass 서버 특성상 종종 발생 — backend.md §6.3 참고) 응답 세그먼트마다 최대 30초씩
+    허비하고서야 폴백(직선)으로 넘어갔다(버스 구간 3개면 최대 90초+). "연결이 안 되는
+    경우"는 몇 초 안에 빠르게 실패하고 폴백해야 하고, "연결은 됐는데 쿼리 계산이 오래
+    걸리는 정상적인 경우"만 기존처럼 넉넉히 기다려야 한다 — 그래서 connect는 짧게(5초),
+    read는 기존대로 넉넉하게(30초) 분리했다.
+    """
     query = (
         "[out:json][timeout:25];"
         f'relation["route"="bus"]["ref"="{route_ref}"]({SEOUL_BBOX});'
         "(._;>;);"
         "out geom;"
     )
-    response = httpx.post(OVERPASS_ENDPOINT, data={"data": query}, timeout=30.0)
+    timeout = httpx.Timeout(connect=5.0, read=30.0, write=5.0, pool=5.0)
+    response = httpx.post(OVERPASS_ENDPOINT, data={"data": query}, timeout=timeout)
     response.raise_for_status()
     data = response.json()
 
