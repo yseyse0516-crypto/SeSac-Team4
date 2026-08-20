@@ -10,3 +10,4 @@ bcrypt
 PyJWT
 pytest
 fakeredis
+openpyxl

@@ -67,8 +67,12 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ### 3. 오프라인 배치 (최초 1회 수동 실행 — 가중치 저장소를 채워야 API가 정상 동작합니다)
 ```bash
 cd backend
-python -m app.batch.run_monthly_batch
+pip install openpyxl   # bus_stop 마스터 파일(xlsx) 파싱에 필요
+python -m app.batch.run_batch
 ```
+`rental_dock` 단계는 행안부 실시간 API를 호출합니다(`BIKE_STOCK_API_KEY` 환경변수 필요) —
+키가 없으면 그 단계만 빈 결과로 넘어가고 나머지 단계는 정상 진행됩니다. 대여소만 단독으로
+재동기화하고 싶다면 `python -m app.batch.run_dock_batch`를 대신 쓰면 됩니다.
 
 ### 4. Frontend (별도 리포지토리)
 ```bash
