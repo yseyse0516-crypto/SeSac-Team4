@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+pydantic
+httpx
+python-dotenv
+shapely
+psycopg[binary,pool]
+redis
+bcrypt
+PyJWT
+pytest

@@ -82,7 +82,9 @@ npm run dev
 | `DATABASE_URL` (또는 `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD`) | PostgreSQL 접속 정보 (`psycopg` v3) |
 | `REDIS_URL` (또는 `REDIS_HOST`/`REDIS_PORT`) | Redis 접속 정보 |
 | `ODSAY_API_KEY` | ODsay LAB 경로탐색 API 키 |
-| `ODSAY_DAILY_QUOTA` | ODsay 일일 호출 한도 (기본 1000) |
+| `ODSAY_DAILY_QUOTA` | ODsay 일일 호출 한도 (실측 30 — 문서상 1,000이었으나 2026-08-19 라이브 테스트로 정정) |
+| `JWT_SECRET` | 로그인 토큰 서명 비밀키 (배포 전 반드시 무작위 값으로 교체) |
+| `TMAP_APP_KEY` | 도보 구간 실제 경로(SK Tmap 보행자경로안내) API 키. 비어있으면 도보는 직선으로 표시됨 |
 | `SERVER_VERSION` / `SERVER_NAME` / `SERVER_IP` | 화면 하단 버전 배너 표시용 |
 
 ## 배포 정보
