@@ -11,8 +11,7 @@ import os
 from fastapi import APIRouter, HTTPException
 
 from app.schemas.route import Candidate, Coordinate, SearchRequest, SearchResponse, Segment
-from app.services import candidate_log_stub as candidate_log
-from app.services import filtering, line_geometry, matching, scoring, walk_geometry
+from app.services import candidate_log, filtering, line_geometry, matching, scoring, walk_geometry
 from app.services.odsay_client import (
     OdsayError,
     OdsayNoCandidateError,

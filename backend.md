@@ -552,7 +552,42 @@ CLAUDE.md §3에 있던 "무료 한도 1,000건/일"은 잘못된 정보였음 �
 
 ---
 
-## 14. 지금 팀 확인이 필요한 것 (열린 이슈 모음)
+## 14. B(zer0 브랜치) 실제 코드 통합 (2026-08-20, 코드 동결 임박 — A 쪽에서 선통합)
+
+윤상은님 결근 + B 통합 지연으로, A가 zer0 브랜치 산출물(`core/db.py`, `core/redis.py`,
+`main.py`, `routers/{bike,coupon,result,system}.py`, `schemas/*`, `services/{bike_route,
+bike_stock,candidate_log}.py`, `sql/*.sql`, `docker-compose.yml`)을 먼저 병합했다.
+
+- **`main.py` 완성**: B의 4개 라우터(system/result/bike/coupon) + A의 4개 라우터
+  (search/board/auth/favorites) 전부 등록. `dev_server.py`/`candidate_log_stub.py`는
+  이제 필요 없어져서 삭제함.
+- **`search.py`가 실제 `candidate_log`(Redis 기반) 사용**으로 전환 — 스텁 제거.
+- **검증 방법**: Docker Desktop이 이 환경에서 안 떠서 실제 Postgres/Redis는 못 띄워봤다.
+  대신 `TestClient`로 실제 `main.py` 전체를 띄워 확인함 — `/health`가 DB/Redis 없음을
+  `degraded`로 정확히 보고, `/auth/register`(프로세스 메모리)는 정상 동작, `/routes/search`는
+  오늘 실제로 소진된 ODsay 쿼터를 그대로 반영해 503을 정확히 반환함(§13 회로차단기가
+  실제 계정 상태로 검증된 셈). **⚠️ 실제 Postgres 연결 자체는 아직 라이브로 확인 못 함**
+  — Docker Desktop 띄운 뒤 `docker compose up -d` 한 번 더 확인 필요.
+- **⚠️ 미해결 — `favorites` 테이블이 B의 스키마(`01_schema.sql`)에 없음.** `users`/
+  `board_post`/`coupon`은 있는데 즐겨찾기 테이블이 빠져있다 — `favorite_service.py`는
+  여전히 프로세스 메모리로 남겨둠(시간 부족 + 실 DB로 검증 못 한 상태에서 급하게 스키마
+  바꾸는 게 더 위험 판단). 시간 되면 `favorite(favorite_id PK, owner_user_id FK, label,
+  origin_lat/lng, destination_lat/lng, created_at)` 추가 필요.
+- **CLAUDE.md 동기화**: zer0 브랜치의 CLAUDE.md가 이미 route_request/route_candidate를
+  Redis 전환으로 갱신해뒀던 걸 확인하고 내 쪽 CLAUDE.md도 맞춰 갱신함(§4/§9/§13).
+- `.env.example`/`.env`: B 코드가 요구하는 `DB_HOST/PORT/NAME/USER/PASSWORD`,
+  `REDIS_HOST/PORT` 방식으로 전환(기존 `DATABASE_URL`/`REDIS_URL` 방식 폐기). B의
+  `BIKE_STOCK_API_KEY`/`ORS_API_KEY`/`FRONT_VERSION`도 추가.
+- `requirements.txt`: `psycopg[binary]` → `psycopg[binary,pool]`(B의 db.py가
+  `psycopg_pool` 필요), `redis` 유지.
+- 쿠폰(`coupon.py`)은 아직 `X-Client-Token`(익명) 방식 그대로 — `get_current_user_id`로
+  바꾸는 건 B의 판단 영역이라 손 안 댐(§12에 이미 전달해둔 내용).
+
+전체 테스트 90개 통과.
+
+---
+
+## 15. 지금 팀 확인이 필요한 것 (열린 이슈 모음)
 
 **해결됨**
 - ~~§7.2 Q3 계단식→완만한 감산~~ → A 단독 결정 사항으로 확정 (scoring.py는 A 전담 파일)

@@ -3,13 +3,17 @@
 main.py는 B 담당이라 여기선 테스트 전용으로 라우터만 얹은 앱을 즉석에서 만든다.
 ODSAY_API_KEY가 없는 상태이므로 odsay_client가 자동으로 fixture(샘플 응답)를 사용한다 —
 실제 키가 들어오면 이 테스트는 그대로 두고 call_odsay()의 실호출 경로만 별도 검증하면 된다.
+
+2026-08-20: candidate_log가 B의 실제 Redis 기반 구현으로 교체됨 — 이 테스트는 라우터
+동작만 검증하는 것이라 실제 Redis 연결 없이 돌아가게 save_request/save_candidates를
+모킹한다(실제 Redis 연동 자체는 B 담당 모듈의 몫).
 """
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.routers.search import router
-from app.services import line_geometry
+from app.services import candidate_log, line_geometry
 
 app = FastAPI()
 app.include_router(router)
@@ -28,6 +32,13 @@ def _stub_bus_curve_lookup(monkeypatch):
     line_geometry 자체의 캐싱/폴백 동작은 test_line_geometry.py에서 모킹으로 검증함."""
     line_geometry._bus_curve_cache.clear()
     monkeypatch.setattr(line_geometry, "_fetch_bus_line", lambda route_ref: [])
+
+
+@pytest.fixture(autouse=True)
+def _stub_candidate_log(monkeypatch):
+    """candidate_log가 실제 Redis에 쓰지 않게 막는다 — 라우터 동작 검증엔 Redis가 필요 없음."""
+    monkeypatch.setattr(candidate_log, "save_request", lambda origin, destination: 1)
+    monkeypatch.setattr(candidate_log, "save_candidates", lambda request_id, candidates: None)
     yield
     line_geometry._bus_curve_cache.clear()
 
