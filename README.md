@@ -101,3 +101,29 @@ npm run dev
 ## 개인정보 원칙
 
 사용자의 위치 이력·식별정보는 저장하지 않으며, 요청 처리 목적으로만 일시적으로 사용합니다. 검색 요청/추천 결과 로그는 Postgres 테이블이 아니라 Redis에 짧은 TTL(1시간)로만 유지하고, 좌표는 저장하지 않습니다. 사용자가 명시적으로 저장을 선택한 즐겨찾기(favorites)만 별도로 영구 보관됩니다 (자세한 내용은 `backend.md` §8, CLAUDE.md §4 참고).
+
+## 브랜치: `feature/station-weight-direction` — `main` 대비 변경 내역
+
+`station_weight`의 UNIQUE 키에 `direction`(상선/하선/내선/외선)이 추가되면서 `station_id`만으로는
+조회 결과가 유일하지 않게 된 문제를 해결하는 브랜치입니다. `odsay_parser.py`가 이미 파싱해두고
+쓰지 않던 하차역(`end_lat`/`end_lng`) 좌표를 매칭에 활용해 방향을 계산하고, 가중치 조회를
+`(station_id, direction)` 조합으로 바꿨습니다. 로컬 Postgres 연동 테스트 포함 전체 스위트 124개
+전부 통과 확인했습니다.
+
+**수정된 파일 (6개)**
+
+| 파일 | 변경 내용 |
+|---|---|
+| `backend/app/routers/search.py` | 하차역 좌표도 매칭해 direction 계산 후 scoring에 전달. 기존 `STATION_WEIGHT` 조회(응답의 `stop_sequence` 필드용)도 `(station_id, direction)` 키로 함께 수정 |
+| `backend/app/schemas/route.py` | 응답 `Segment`에 `direction` 필드 추가(디버깅/프론트 노출용) |
+| `backend/app/services/hardcoded_weights.py` | `StationMaster`에 `line_name`/`station_no` 추가, `STATION_WEIGHT` 키를 `(station_id, direction)`으로 변경 |
+| `backend/app/services/matching.py` | `MatchResult`에 `line_name`/`station_no` 추가(매칭 성공 시 채워짐) |
+| `backend/app/services/scoring.py` | `score_segment()`에 `direction` 파라미터 추가, `(station_id, direction)`으로 조회 |
+| `backend/tests/test_matching.py`, `backend/tests/test_scoring.py` | 새 시그니처/필드에 맞춰 테스트 갱신 |
+
+**추가된 파일 (2개)**
+
+| 파일 | 내용 |
+|---|---|
+| `backend/app/services/direction.py` | `determine_direction()` — 2호선은 원형 산술(외선/내선), 1·8호선은 물리순서 리스트 비교(동묘앞/남위례 역번호 예외 처리), 나머지 노선은 역번호 대소 비교. 2호선 지선(성수/신정)은 원형 규칙이 안 통해 의도적으로 `None`(중립값) 처리 |
+| `backend/tests/test_direction.py` | `direction.py` 단위 테스트 12개(원형 규칙, 지선 예외, 물리순서 예외, 퇴화 케이스 등) |
