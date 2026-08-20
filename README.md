@@ -42,9 +42,11 @@
 - Node.js {버전}, Python {버전}
 - PostgreSQL, Redis, nginx (로컬 설치 또는 Docker Compose)
 - ODsay LAB API 키 (사전 발급 필요)
+- 프론트엔드는 별도 리포지토리(`SeSac-Team4-Frontend`)다 — 이 리포엔 `frontend/`가 없다.
 
 ```bash
-cp frontend/.env.example frontend/.env
+git clone https://github.com/yseyse0516-crypto/SeSac-Team4-Frontend.git ../SeSac-Team4-Frontend
+cp ../SeSac-Team4-Frontend/.env.example ../SeSac-Team4-Frontend/.env
 cp backend/.env.example backend/.env
 ```
 
@@ -68,9 +70,9 @@ cd backend
 python -m app.batch.run_monthly_batch
 ```
 
-### 4. Frontend
+### 4. Frontend (별도 리포지토리)
 ```bash
-cd frontend
+cd ../SeSac-Team4-Frontend
 npm install
 npm run dev
 ```

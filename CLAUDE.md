@@ -67,8 +67,12 @@
 
 ## 6. 디렉토리 구조
 
+⚠️ 프론트엔드는 이 리포(모노레포)가 아니라 **별도 리포지토리**(`SeSac-Team4-Frontend`)로 분리돼 있다
+(2026-08-20 확인, 아래 트리는 원래 계획이었던 모노레포 구조를 그대로 남겨둔 것 — 실제로는
+`frontend/`가 이 리포에 없다).
+
 ```
-tangtang/
+tangtang/ (SeSac-Team4 — 백엔드)
 ├── CLAUDE.md
 ├── README.md
 ├── docs/
@@ -76,14 +80,15 @@ tangtang/
 │   ├── architecture/                # 구성도(파이프라인·네트워크) — 가장 중요
 │   ├── api-contracts/{module}.md
 │   └── prompts/
-├── frontend/                        # React + Vite
-│   └── src/{screens,components,store,api,types,hooks,constants}/routing, home, common
 ├── backend/
 │   └── app/
 │       ├── core/                    # DB 커넥션 풀, 공용 설정
 │       ├── modules/routing/         # routers / schemas / services / queries — 요청 처리 서버
 │       └── batch/                   # 오프라인 배치 파이프라인 (월 1회 실행, routing과 분리)
 └── .github/workflows/
+
+tangtang-frontend/ (SeSac-Team4-Frontend — 별도 리포, React + Vite)
+└── src/{screens,components,store,api,types,hooks,constants}/routing, home, common
 ```
 
 ## 7. 처리 파이프라인 (핵심 아키텍처)
