@@ -3,13 +3,24 @@
 main.py는 B 담당이라 여기선 테스트 전용으로 라우터만 얹은 앱을 즉석에서 만든다.
 ODSAY_API_KEY가 없는 상태이므로 odsay_client가 자동으로 fixture(샘플 응답)를 사용한다 —
 실제 키가 들어오면 이 테스트는 그대로 두고 call_odsay()의 실호출 경로만 별도 검증하면 된다.
+
+2026-08-20 수정(김재우, 초안 — A 리뷰 전): search.py가 이제 hardcoded_weights.py 대신
+실제 station/bus_stop/station_weight/bus_weight를 조회한다(weight_repository.py).
+02_seed.sql의 더미 데이터만으로는 odsay_sample_response.json이 참조하는 실제
+역/정류장(답십리·여의도, 118000070)이 없어 매칭이 안 되므로, 이 파일 전용으로
+그 역/정류장에 맞는 최소한의 실제 데이터를 직접 심어둔다(_real_weight_fixture).
+전체 배치(app/batch/run_batch.py)를 매 테스트 실행마다 돌리기엔 느려서, 이 두
+테스트가 필요로 하는 딱 그만큼만 넣고 끝나면 지운다.
 """
+from datetime import datetime
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.core import db
 from app.routers.search import router
-from app.services import line_geometry
+from app.services import line_geometry, weight_repository
 
 app = FastAPI()
 app.include_router(router)
@@ -19,6 +30,12 @@ REQUEST_BODY = {
     "origin": {"lat": 37.5012, "lng": 127.0396},
     "destination": {"lat": 37.4784, "lng": 126.8874},
 }
+
+# odsay_sample_response.json에서 실제로 쓰이는 값 (subPath 실측 확인, 2026-08-20).
+_DAPSIMNI = {"name": "답십리", "line_name": "5호선", "station_no": "2543", "lat": 37.56709, "lng": 127.052361}
+_YEOUIDO = {"name": "여의도", "line_name": "5호선", "station_no": "2527", "lat": 37.521624, "lng": 126.924082}
+_BUS_STOP_STD_ID = "118000070"  # 여의도역6번출구
+_BUS_ROUTE_ID = "5623"
 
 
 @pytest.fixture(autouse=True)
@@ -30,6 +47,79 @@ def _stub_bus_curve_lookup(monkeypatch):
     monkeypatch.setattr(line_geometry, "_fetch_bus_line", lambda route_ref: [])
     yield
     line_geometry._bus_curve_cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def _real_weight_fixture():
+    """search.py가 실제 DB를 조회하므로, 이 파일이 검증하려는 역/정류장에 맞는
+    최소한의 station/bus_stop/station_weight/bus_weight 행을 직접 심고 테스트가
+    끝나면 지운다. time_slot/dow는 지금(now()) 기준으로 계산해 search.py가 요청
+    시점에 실제로 조회할 값과 맞춘다(departure_time 미지정 시 now() 사용 — search.py
+    참고)."""
+    dt = datetime.now()
+    time_slot = weight_repository.time_slot_for(dt)
+    dow = dt.weekday()
+
+    with db.get_cursor() as cur:
+        cur.execute(
+            "INSERT INTO station (station_name, line_name, station_no, lat, lng) "
+            "VALUES (%(name)s, %(line_name)s, %(station_no)s, %(lat)s, %(lng)s)",
+            _DAPSIMNI,
+        )
+        cur.execute("SELECT lastval() AS id")
+        dapsimni_id = cur.fetchone()["id"]
+
+        cur.execute(
+            "INSERT INTO station (station_name, line_name, station_no, lat, lng) "
+            "VALUES (%(name)s, %(line_name)s, %(station_no)s, %(lat)s, %(lng)s)",
+            _YEOUIDO,
+        )
+
+        cur.execute(
+            "INSERT INTO bus_stop (stop_std_id, stop_name, lat, lng) "
+            "VALUES (%s, %s, %s, %s)",
+            (_BUS_STOP_STD_ID, "여의도역6번출구", 37.520631, 126.924843),
+        )
+        cur.execute("SELECT lastval() AS id")
+        bus_stop_id = cur.fetchone()["id"]
+
+        cur.execute(
+            "INSERT INTO batch_run (run_month, status, started_at, finished_at, note) "
+            "VALUES ('2026-08', 'success', now(), now(), 'test_search_router.py 전용 fixture')"
+        )
+        cur.execute("SELECT lastval() AS id")
+        batch_id = cur.fetchone()["id"]
+
+        # station_no 2543(답십리) -> 2527(여의도)로 감소 = 상선 (direction.py 규칙과 동일)
+        cur.execute(
+            "INSERT INTO station_weight "
+            "(station_id, batch_id, direction, time_slot, dow, net_onboard, congestion_pct, stop_sequence) "
+            "VALUES (%s, %s, '상선', %s, %s, 100.0, 120.0, 5)",
+            (dapsimni_id, batch_id, time_slot, dow),
+        )
+        cur.execute(
+            "INSERT INTO bus_weight (stop_id, route_id, batch_id, time_slot, dow, net_onboard, stop_sequence) "
+            "VALUES (%s, %s, %s, %s, %s, 30.0, 4)",
+            (bus_stop_id, _BUS_ROUTE_ID, batch_id, time_slot, dow),
+        )
+
+    yield
+
+    with db.get_cursor() as cur:
+        cur.execute(
+            "DELETE FROM station_weight WHERE station_id = %s AND batch_id = %s",
+            (dapsimni_id, batch_id),
+        )
+        cur.execute(
+            "DELETE FROM bus_weight WHERE stop_id = %s AND batch_id = %s",
+            (bus_stop_id, batch_id),
+        )
+        cur.execute("DELETE FROM batch_run WHERE batch_id = %s", (batch_id,))
+        cur.execute("DELETE FROM bus_stop WHERE stop_std_id = %s", (_BUS_STOP_STD_ID,))
+        cur.execute(
+            "DELETE FROM station WHERE line_name = %s AND station_no IN (%s, %s)",
+            (_DAPSIMNI["line_name"], _DAPSIMNI["station_no"], _YEOUIDO["station_no"]),
+        )
 
 
 def test_search_returns_200_with_candidates():
@@ -66,10 +156,10 @@ def test_bus_segment_has_matched_stop_id_when_known():
         if seg["mode"] == "bus"
     ]
     assert bus_segments
-    # 118000070(여의도역6번출구)는 hardcoded_weights에 있는 정류장이라 매칭돼야 함
-    matched_known = [s for s in bus_segments if s["stop_std_id"] == "118000070"]
+    # 118000070(여의도역6번출구)는 _real_weight_fixture가 심어둔 실제 bus_stop 행이라 매칭돼야 함
+    matched_known = [s for s in bus_segments if s["stop_std_id"] == _BUS_STOP_STD_ID]
     assert matched_known and matched_known[0]["matched"] is True
-    assert matched_known[0]["stop_id"] == 101
+    assert matched_known[0]["stop_id"] is not None
 
 
 def test_matched_subway_segment_has_stop_sequence():

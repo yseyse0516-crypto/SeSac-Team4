@@ -1,6 +1,9 @@
+from datetime import datetime
+
 import pytest
 
-from app.services import scoring
+from app.core import db
+from app.services import scoring, weight_repository
 from app.services.matching import MatchResult
 
 
@@ -71,3 +74,43 @@ def test_score_candidate_is_duration_weighted_average():
 
 def test_score_candidate_empty_segments_is_zero():
     assert scoring.score_candidate([]) == 0.0
+
+
+# 2026-08-20 추가(김재우, 초안): cur가 주어지면 weight_repository.py를 통해 실제
+# DB를 조회한다 — test_weight_repository.py가 그 조회 자체는 이미 검증했으니
+# 여기서는 score_segment()가 cur 유무에 따라 올바른 경로를 타는지만 확인한다.
+def test_score_segment_with_cur_uses_real_db_row():
+    dt = datetime.now()
+    try:
+        with db.get_cursor() as cur:
+            cur.execute(
+                "INSERT INTO station (station_name, line_name, station_no, lat, lng) "
+                "VALUES ('스코어링테스트역', '9호선', '9101', 37.3, 127.3)"
+            )
+            cur.execute("SELECT lastval() AS id")
+            station_id = cur.fetchone()["id"]
+            cur.execute(
+                "INSERT INTO batch_run (run_month, status, started_at, finished_at, note) "
+                "VALUES ('2026-08', 'success', now(), now(), 'test_scoring.py 전용')"
+            )
+            cur.execute("SELECT lastval() AS id")
+            batch_id = cur.fetchone()["id"]
+            cur.execute(
+                "INSERT INTO station_weight "
+                "(station_id, batch_id, direction, time_slot, dow, net_onboard, congestion_pct, stop_sequence) "
+                "VALUES (%s, %s, '상선', %s, %s, 10.0, 75.0, 0)",
+                (station_id, batch_id, weight_repository.time_slot_for(dt), dt.weekday()),
+            )
+
+        with db.get_cursor() as cur:
+            score = scoring.score_segment(
+                "subway", MatchResult(matched=True, station_id=station_id), "상선", cur=cur, dt=dt
+            )
+    finally:
+        with db.get_cursor() as cur:
+            cur.execute("DELETE FROM station_weight WHERE batch_id = %s", (batch_id,))
+            cur.execute("DELETE FROM batch_run WHERE batch_id = %s", (batch_id,))
+            cur.execute("DELETE FROM station WHERE station_no = '9101' AND line_name = '9호선'")
+
+    base = min(75.0 / scoring.SUBWAY_CONGESTION_DIVISOR, 1.0)
+    assert score == pytest.approx(base * scoring.stop_sequence_discount(0))

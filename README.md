@@ -167,3 +167,34 @@ npm run dev
 ### 검증
 
 로컬 Postgres(이 저장소의 스키마 그대로, tangtang 역할)에 대해 `python -m app.batch.run_batch`를 실제로 끝까지 실행: `station=269건`, `bus_stop=12898건`, `station_weight=75320건`, `bus_weight=4565880건`(`stop_sequence` 채워짐), `dock_hub_distance=405건`, `rental_dock=0건`(API 키 없어 정상 스킵). 이후 DB를 깨끗한 시드 상태로 리셋하고 `pytest` 전체 110/110 통과 확인(배치 코드 추가가 기존 테스트에 영향 없음).
+
+## 브랜치: feature/weight-db-lookup — `feature/station-weight-direction` + `feature/batch-etl` 통합 기준 변경 내역
+
+⚠️ **초안(draft) — A(정종우) 리뷰 전.** `matching.py`/`scoring.py`는 A 전담 파일이고, 이 브랜치가 그 두 파일과 A의 테스트 파일(`test_matching.py`, `test_scoring.py`, `test_search_router.py`)을 수정합니다. main 병합 전 반드시 A 리뷰가 필요합니다.
+
+배치가 이제 `station`/`bus_stop`/`station_weight`/`bus_weight`에 실제 데이터를 채우므로, `search.py`가 `hardcoded_weights.py`의 가짜 값 대신 이 테이블들을 조회하도록 연결하는 브랜치입니다. `station_weight`가 `direction` 컬럼으로 유니크 키를 잡기 때문에 `feature/station-weight-direction`이 선행돼야 하고, `bus_weight.stop_sequence` 컬럼과 실제 배치 데이터가 필요해 `feature/batch-etl`도 선행돼야 합니다 — 그래서 이 브랜치는 `main`이 아니라 두 브랜치를 먼저 병합한 `integration/direction-and-batch-etl`에서 분기했습니다.
+
+### 설계 결정 — DB에 값이 없을 때
+
+배치가 아직 안 돌았거나, 매칭은 됐는데 해당 역/구간·시간대·방향 조합 데이터가 없으면 기존 Q4 매칭 실패 정책과 동일하게 중립값(`NEUTRAL_CONGESTION_SCORE=0.5`)으로 처리합니다. 없는 값을 임의로 추정하거나 다른 방향/시간대 값을 대신 쓰지 않습니다.
+
+### 추가된 파일 (2개)
+
+| 파일 | 설명 |
+|---|---|
+| `backend/app/services/weight_repository.py` | station/bus_stop/station_weight/bus_weight 실 데이터 조회 계층. `time_slot_for()`(시각→시간당 버킷 변환), `latest_batch_id()`, `match_subway_station()`/`match_bus_stop()`(반경/ID 매칭), `get_station_weight()`/`get_bus_weight()`(방향·시간대·요일 조합 조회) |
+| `backend/tests/test_weight_repository.py` | 위 조회 함수들의 단위 테스트(전용 행을 심고 지움 — seed 데이터는 `direction=NULL`/30분 버킷이라 이 모듈의 조회 조건과 안 맞아 의도적으로 안 씀) |
+
+### 수정된 파일 (4개)
+
+| 파일 | 변경 내용 |
+|---|---|
+| `backend/app/services/matching.py` | `match_subway_station()`/`match_bus_stop()`에 `cur=None` 파라미터 추가. `cur`를 넘기면 `weight_repository.py`로 실제 DB 조회, 안 넘기면(기존 단위 테스트 호출 방식) 지금까지의 하드코딩 fixture 그대로 사용 — 기존 단위 테스트 무변경 보존 |
+| `backend/app/services/scoring.py` | `score_segment()`에 `cur=None`, `dt=None`, `route_id=None` 파라미터 추가. 같은 원칙(`cur` 있으면 실제 DB, 없으면 기존 하드코딩) |
+| `backend/app/routers/search.py` | 요청 하나당 `db.get_cursor()`로 커서 하나를 열어 모든 세그먼트의 매칭·스코어링에 재사용. `departure_time` 미지정 시 `now()`를 조회 기준 시각으로 사용 |
+| `backend/tests/test_matching.py`, `test_scoring.py` | `cur`를 넘기는 DB 조회 경로에 대한 단위 테스트 추가(기존 하드코딩 경로 테스트는 그대로 유지) |
+| `backend/tests/test_search_router.py` | `search.py`가 이제 항상 실제 DB를 조회하므로, `02_seed.sql`의 더미 데이터만으론 `odsay_sample_response.json`이 참조하는 실제 역/정류장(답십리·여의도, `118000070`)이 없어 두 테스트가 깨졌습니다. 이 파일 전용으로 그 역/정류장에 맞는 최소 데이터를 심고 지우는 `_real_weight_fixture`를 추가하고, `stop_id == 101`처럼 하드코딩 값에 의존하던 단언을 실제 매칭 여부 확인으로 바꿨습니다 |
+
+### 검증
+
+로컬 Postgres에 실제 배치(`python -m app.batch.run_batch`)를 돌린 뒤, 실제 서버(`uvicorn`)를 띄워 답십리→여의도 좌표로 `/api/v1/routes/search`를 호출: `station_id=158`(배치가 실제로 부여한 ID), `direction="상선"`(실제 계산값), `stop_sequence=13`(실제 배치 데이터), `congestion_score=0.5751`처럼 하드코딩이 아닌 실제 값이 응답에 나오는 것을 확인했습니다. 이후 DB를 깨끗한 시드 상태로 리셋하고 `pytest` 전체 140/140 통과 확인(기존 124개 + 이번에 추가한 16개).

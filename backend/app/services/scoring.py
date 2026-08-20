@@ -12,9 +12,17 @@ Q3는 scoring.py가 A 전담 파일이라 B 확인 없이 A 단독으로 계단�
 파라미터를 추가해 (station_id, direction)로 조회하도록 바꿨다 — direction이
 None이면(매칭 실패, 판정 불가 예외 등 — direction.py 참고) 조회 자체를 시도하지
 않고 중립값을 적용한다(있지도 않은 값을 임의로 골라 쓰지 않기 위함).
+
+2026-08-20 추가 수정(김재우, 초안 — A 리뷰 전): cur(DB 커서)를 넘기면
+hardcoded_weights.py의 가짜 값 대신 weight_repository.py로 실제 station_weight/
+bus_weight를 조회한다. cur를 넘기지 않으면(기존 단위 테스트 호출 방식) 지금까지처럼
+하드코딩된 딕셔너리로 동작한다 — matching.py와 동일한 이유(기존 단위 테스트 보존).
+dt는 조회에 쓸 time_slot/dow 계산 기준 시각(SearchRequest.departure_time, 없으면
+호출부가 now()를 넘김), route_id는 버스 구간에서 bus_weight.route_id 조회에 필요.
 """
 from typing import Optional
 
+from app.services import weight_repository
 from app.services.hardcoded_weights import BUS_WEIGHT, STATION_WEIGHT
 from app.services.matching import MatchResult
 
@@ -39,12 +47,21 @@ def stop_sequence_discount(stop_sequence: Optional[int]) -> float:
 
 
 def score_segment(
-    mode: str, match: MatchResult, direction: Optional[str] = None
+    mode: str,
+    match: MatchResult,
+    direction: Optional[str] = None,
+    cur=None,
+    dt=None,
+    route_id: Optional[str] = None,
 ) -> Optional[float]:
     """구간 하나의 congestion_score. 도보 구간은 혼잡 개념이 없어 None(가중평균에서 제외).
 
     direction은 지하철 구간에서만 쓴다(direction.determine_direction()의 반환값을
     그대로 전달). 버스는 방향 개념이 없어 무시한다.
+
+    cur가 주어지면 실제 station_weight/bus_weight를 조회한다(dt=조회 기준 시각,
+    route_id=버스 노선ID, 둘 다 이 경로에서 필요). cur가 없으면 기존처럼
+    hardcoded_weights.py를 그대로 쓴다(단위 테스트 호환).
     """
     if mode == "walk":
         return None
@@ -53,6 +70,13 @@ def score_segment(
         return NEUTRAL_CONGESTION_SCORE
 
     if mode == "subway":
+        if cur is not None:
+            row = weight_repository.get_station_weight(cur, match.station_id, direction, dt)
+            if row is None:
+                return NEUTRAL_CONGESTION_SCORE
+            base = min(float(row["congestion_pct"]) / SUBWAY_CONGESTION_DIVISOR, 1.0)
+            return base * stop_sequence_discount(row["stop_sequence"])
+
         weight = STATION_WEIGHT.get((match.station_id, direction))
         if weight is None:
             # direction=None(매칭 실패/판정 불가) 또는 그 방향의 행이 아직 없음 —
@@ -62,6 +86,13 @@ def score_segment(
         return base * stop_sequence_discount(weight.stop_sequence)
 
     if mode == "bus":
+        if cur is not None:
+            row = weight_repository.get_bus_weight(cur, match.stop_id, route_id, dt)
+            if row is None:
+                return NEUTRAL_CONGESTION_SCORE
+            base = min(float(row["net_onboard"]) / BUS_NET_ONBOARD_DIVISOR, 1.0)
+            return base * stop_sequence_discount(row["stop_sequence"])
+
         weight = BUS_WEIGHT.get(match.stop_id)
         if weight is None:
             return NEUTRAL_CONGESTION_SCORE
