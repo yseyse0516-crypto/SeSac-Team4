@@ -1,8 +1,6 @@
 """walk_geometry.get_walk_curve() — Tmap 보행자경로 API 연동 테스트.
 
-⚠️ 2026-08-19 저녁 기준 TMAP_APP_KEY가 아직 없어서(발급 진행 중) 실제 네트워크 호출은
-검증 못 했다 — _call_tmap을 모킹해서 파싱/폴백 로직만 검증한다. 키가 오면 odsay_client.py
-때처럼 실호출로 재검증 필요(backend.md §13).
+_call_tmap을 모킹해서 파싱/폴백 로직을 검증한다(실제 API 라이브 검증은 backend.md §13 참고).
 """
 import httpx
 import pytest

@@ -1,9 +1,5 @@
-"""_interpret_response()는 2026-08-19 실제 ODsay 키로 라이브 호출해서 확인한
-세 가지 응답 형태(오류/후보없음/정상)를 그대로 재현한 테스트다.
-
-2026-08-19 밤 추가: 실제로 40회 연속 호출해서 확인한 "일일 한도 30건"(문서화된
-1,000건과 다름) 대응으로 추가한 캐싱/회로차단기 테스트. httpx.get을 모킹해서
-실제 네트워크 호출 없이 캐싱/쿼터 로직만 검증한다.
+"""_interpret_response()가 구분하는 응답 형태(오류/후보없음/정상)와, 캐싱/쿼터 소진
+회로차단기 로직을 검증한다. httpx.get을 모킹해서 실제 네트워크 호출 없이 확인한다.
 """
 import time
 
@@ -49,7 +45,7 @@ def _fake_httpx_get(calls, status_code=200, json_data=None):
 
 
 def test_auth_error_response_raises_odsay_error_not_no_candidate():
-    # 2026-08-19 라이브 호출로 실제 확인된 형태 (IP 미등록 시 이 오류가 옴)
+    # IP 미등록 등 인증 실패 시 실제로 오는 형태
     live_error_response = {"error": [{"code": "500", "message": "[ApiKeyAuthFailed] ApiKey authentication failed."}]}
     with pytest.raises(OdsayError):
         _interpret_response(live_error_response)
@@ -71,11 +67,11 @@ def test_normal_response_with_paths_passes_through():
     assert _interpret_response(response) is response
 
 
-# --- 쿼터 소진 감지 (2026-08-19 밤, 실측 근거) ---
+# --- 쿼터 소진 감지 ---
 
 
 def test_quota_exceeded_response_raises_specific_exception():
-    # 2026-08-19 밤 실제로 40회 연속 호출해서 30번째에 받은 것과 동일한 형태
+    # 실제 쿼터 소진 시 받는 것과 동일한 형태
     quota_response = {"error": [{"code": "429", "message": "Daily quota exceeded"}]}
     with pytest.raises(OdsayQuotaExceededError):
         _interpret_response(quota_response)

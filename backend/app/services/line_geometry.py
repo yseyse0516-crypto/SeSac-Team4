@@ -6,9 +6,9 @@
 - 지하철: 수도권 전체 25개 노선뿐이라 미리 다 받아 backend/app/data/subway_lines.geojson으로
   저장해두고 서버 시작 후 첫 호출 때 한 번만 읽는다(_load_merged_lines, lru_cache).
 - 버스: 수도권 전체로 치면 노선(관계 기준) 수가 지하철의 8~9배(약 1,588개)라 미리 다 받는 건
-  시간·용량·Overpass 공유서버 부담이 너무 크다(실측: relation 8.8배/way 15.7배/node 8.2배,
-  2026-08-19 count 조회로 확인). 대신 실제 요청에 등장한 노선번호만 그때 Overpass에 물어보고
-  (get_bus_curve), 프로세스 메모리에 캐싱해서 같은 노선 재요청 시 네트워크 호출 없이 재사용한다.
+  시간·용량·Overpass 공유서버 부담이 너무 크다. 대신 실제 요청에 등장한 노선번호만 그때
+  Overpass에 물어보고(get_bus_curve), 프로세스 메모리에 캐싱해서 같은 노선 재요청 시
+  네트워크 호출 없이 재사용한다.
 
 둘 다 최종적으로는 같은 방식(_cut_curve)으로 자른다 — 노선 조각들을 하나의 연속된
 LineString으로 합친 뒤(linemerge), 그 위에 시작/끝 좌표를 투영해서 그 사이 구간만
@@ -48,8 +48,7 @@ SEOUL_BBOX = "36.95,126.55,37.85,127.35"
 # route_ref(ODsay busNo) -> 병합된 LineString 후보 리스트. 노선 하나당 최초 요청 때만
 # Overpass를 호출하고 그 뒤엔 서버가 떠 있는 동안 재사용한다. 조회 실패/노선 없음도 빈
 # 리스트로 캐싱해서 같은 실패를 매 요청마다 반복 조회하지 않는다(음성 캐싱).
-# TODO(8/20 오전 A·B 통합 후): core/redis.py(B)가 붙으면 이 프로세스 캐시를 Redis로
-# 옮겨서 재시작/다중 인스턴스 사이에도 공유되게 한다 (backend.md §6.3).
+# TODO: 다중 인스턴스 배포 시 Redis로 옮겨서 인스턴스 간에도 공유되게 한다 (backend.md §6.3).
 _bus_curve_cache: dict[str, list] = {}
 
 
