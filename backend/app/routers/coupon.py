@@ -1,19 +1,15 @@
 from typing import Optional
 
-import jwt
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core import db
 from app.core.redis import get_client
 from app.schemas.coupon import CouponClaimResponse, CouponClaimStatus, CouponInfo
-from app.services import auth_service
-from app.services.auth_service import get_current_user_id
+from app.services.auth_service import get_current_user_id, get_optional_user_id
 
 router = APIRouter(tags=["coupon"])
 
 _PENDING = "-1"
-_optional_bearer = HTTPBearer(auto_error=False)
 
 
 def _get_coupon(coupon_id: int) -> dict | None:
@@ -32,33 +28,15 @@ def _ensure_stock_key(coupon_id: int, total_stock: int) -> str:
     return stock_key
 
 
-def _get_optional_user_id(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_optional_bearer),
-) -> Optional[int]:
-    """조회(GET)는 비로그인도 허용해야 해서, 실패해도 401 대신 None을 반환한다.
-    발급(POST)은 auth_service.get_current_user_id로 로그인을 강제한다."""
-    if credentials is None:
-        return None
-    try:
-        payload = jwt.decode(
-            credentials.credentials,
-            auth_service._jwt_secret(),
-            algorithms=[auth_service.JWT_ALGORITHM],
-        )
-    except jwt.PyJWTError:
-        return None
-    return payload.get("user_id")
-
-
 @router.get("/coupons/{coupon_id}", response_model=CouponInfo)
 def get_coupon_info(
     coupon_id: int,
-    user_id: Optional[int] = Depends(_get_optional_user_id),
+    user_id: Optional[int] = Depends(get_optional_user_id),
 ) -> CouponInfo:
     """쿠폰 정보 조회. 로그인 상태면 내가 이미 발급받았는지도 같이 알려준다."""
     coupon = _get_coupon(coupon_id)
     if coupon is None:
-        raise HTTPException(status_code=404, detail="COUPON_NOT_FOUND")
+        raise HTTPException(status_code=404, detail={"code": "COUPON_NOT_FOUND"})
 
     r = get_client()
     stock_key = _ensure_stock_key(coupon_id, coupon["total_stock"])
@@ -97,7 +75,7 @@ def claim_coupon(
 
     coupon = _get_coupon(coupon_id)
     if coupon is None:
-        raise HTTPException(status_code=404, detail="COUPON_NOT_FOUND")
+        raise HTTPException(status_code=404, detail={"code": "COUPON_NOT_FOUND"})
 
     r = get_client()
     stock_key = _ensure_stock_key(coupon_id, coupon["total_stock"])
@@ -110,7 +88,7 @@ def claim_coupon(
         existing = r.hget(users_key, user_key)
         if existing == _PENDING:
             # 같은 계정의 첫 요청이 아직 순번을 기록하기 전에 들어온 재시도.
-            raise HTTPException(status_code=409, detail="CLAIM_IN_PROGRESS")
+            raise HTTPException(status_code=409, detail={"code": "CLAIM_IN_PROGRESS"})
         remaining = max(int(r.get(stock_key) or 0), 0)
         return CouponClaimResponse(
             status=CouponClaimStatus.ALREADY_CLAIMED,

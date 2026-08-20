@@ -38,7 +38,7 @@ class User:
     password_hash: bytes
     nickname: str
     role: str = "member"  # 지금은 미사용 — 관리자 권한 기능은 추후 필요 시 이 필드로 확장
-    created_at: datetime = None
+    created_at: Optional[datetime] = None
 
 
 class UsernameTakenError(Exception):
@@ -122,6 +122,19 @@ def get_current_user_id(
     if user_id is None:
         raise HTTPException(status_code=401, detail={"code": "LOGIN_REQUIRED"})
     return user_id
+
+
+def get_optional_user_id(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme),
+) -> Optional[int]:
+    """비로그인도 허용해야 하는 조회(GET) 엔드포인트용 — 실패해도 401 대신 None을 반환한다."""
+    if credentials is None:
+        return None
+    try:
+        payload = jwt.decode(credentials.credentials, _jwt_secret(), algorithms=[JWT_ALGORITHM])
+    except jwt.PyJWTError:
+        return None
+    return payload.get("user_id")
 
 
 def get_current_user(user_id: int = Depends(get_current_user_id)) -> User:

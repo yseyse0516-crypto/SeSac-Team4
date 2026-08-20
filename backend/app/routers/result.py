@@ -13,7 +13,7 @@ router = APIRouter(tags=["result"])
 def get_route_result(request_id: int) -> RouteResult:
     raw = get_client().get(request_key(request_id))
     if raw is None:
-        raise HTTPException(status_code=404, detail="NO_CANDIDATE")
+        raise HTTPException(status_code=404, detail={"code": "NO_CANDIDATE"})
 
     candidates = json.loads(raw)["candidates"]
     return RouteResult(

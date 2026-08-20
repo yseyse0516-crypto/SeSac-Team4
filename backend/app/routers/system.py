@@ -82,5 +82,5 @@ def get_health() -> HealthResponse:
 def get_admin_batch_latest() -> LatestBatch:
     batch = _latest_batch()
     if batch is None:
-        raise HTTPException(status_code=404, detail="NO_BATCH_RUN")
+        raise HTTPException(status_code=404, detail={"code": "NO_BATCH_RUN"})
     return batch

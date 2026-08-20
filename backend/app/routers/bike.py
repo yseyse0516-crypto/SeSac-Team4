@@ -53,5 +53,5 @@ def get_bike_route(
     """
     route = bike_route.get_bike_route(origin_lat, origin_lng, dest_lat, dest_lng)
     if route is None:
-        raise HTTPException(status_code=502, detail="ROUTE_UNAVAILABLE")
+        raise HTTPException(status_code=502, detail={"code": "ROUTE_UNAVAILABLE"})
     return BikeRoute(**route)
