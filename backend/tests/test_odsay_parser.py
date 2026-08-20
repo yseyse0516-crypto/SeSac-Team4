@@ -3,7 +3,7 @@ from pathlib import Path
 
 from app.services.odsay_parser import fill_walk_coordinates, parse_odsay_result
 
-FIXTURE = Path(__file__).parent / "fixtures" / "odsay_sample_response.json"
+FIXTURE = Path(__file__).resolve().parents[1] / "app" / "data" / "odsay_sample_response.json"
 
 
 def _load_raw():

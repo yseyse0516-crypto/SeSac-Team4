@@ -1,6 +1,6 @@
 """ODsay 응답(result.path[])을 내부 후보/구간 구조로 변환한다.
 
-ODsay 실응답(`backend/tests/fixtures/odsay_sample_response.json`, 17개 후보,
+ODsay 실응답(`backend/app/data/odsay_sample_response.json`, 17개 후보,
 래미안위브아파트→독산사거리, backend.md §10 데모 좌표와 동일 케이스)을 직접 뜯어서
 확인한 구조 기준으로 작성함:
 

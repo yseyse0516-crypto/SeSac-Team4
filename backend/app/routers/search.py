@@ -3,8 +3,7 @@
 ODsay 1회 호출 → 좌표 매칭(Q4) → 혼잡 스코어링(Q1/Q3) → 분당개선 필터링(Q2) →
 비교 응답(최단시간 vs 추천) 순서로 처리한다 (backend.md §3/§7).
 
-담당: 정종우(A). main.py/core/*는 B 담당이라 여기서 건드리지 않는다 — 이 라우터는
-B의 main.py가 `include_router(search.router)`로 등록할 예정.
+담당: 정종우(A). main.py/core/*는 B 담당이라 여기서 건드리지 않는다.
 """
 import os
 
@@ -13,6 +12,7 @@ from fastapi import APIRouter, HTTPException
 from app.schemas.route import Candidate, Coordinate, SearchRequest, SearchResponse, Segment
 from app.services import candidate_log
 from app.services import filtering, line_geometry, matching, scoring, walk_geometry
+from app.services.hardcoded_weights import BUS_WEIGHT, STATION_WEIGHT
 from app.services.odsay_client import (
     OdsayError,
     OdsayNoCandidateError,
@@ -64,6 +64,14 @@ def search_routes(payload: SearchRequest) -> SearchResponse:
             if seg_score is not None:
                 segment_scores.append((seg.duration_min, seg_score))
 
+            stop_sequence = None
+            if seg.mode == "subway" and match.station_id is not None:
+                weight = STATION_WEIGHT.get(match.station_id)
+                stop_sequence = weight.stop_sequence if weight else None
+            elif seg.mode == "bus" and match.stop_id is not None:
+                weight = BUS_WEIGHT.get(match.stop_id)
+                stop_sequence = weight.stop_sequence if weight else None
+
             polyline = None
             if seg.mode == "subway":
                 curve = line_geometry.get_curve(
@@ -95,6 +103,7 @@ def search_routes(payload: SearchRequest) -> SearchResponse:
                     stop_id=match.stop_id,
                     stop_std_id=seg.stop_std_id,
                     route_id=seg.route_id,
+                    stop_sequence=stop_sequence,
                     matched=match.matched,
                     polyline=polyline,
                 )

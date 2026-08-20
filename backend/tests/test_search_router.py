@@ -72,6 +72,19 @@ def test_bus_segment_has_matched_stop_id_when_known():
     assert matched_known[0]["stop_id"] == 101
 
 
+def test_matched_subway_segment_has_stop_sequence():
+    resp = client.post("/api/v1/routes/search", json=REQUEST_BODY)
+    body = resp.json()
+    subway_segments = [
+        seg
+        for c in body["candidates"]
+        for seg in c["segments"]
+        if seg["mode"] == "subway" and seg["matched"]
+    ]
+    assert subway_segments
+    assert any(seg["stop_sequence"] is not None for seg in subway_segments)
+
+
 def test_out_of_range_coordinates_return_400_invalid_input():
     bad_body = {
         "origin": {"lat": 999.0, "lng": 127.0},
