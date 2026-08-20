@@ -39,6 +39,9 @@ function emptyDraft(author: string): DraftState {
 export function CommunityPage({ defaultAuthor }: CommunityPageProps) {
   const [posts, setPosts] = useState<CommunityPost[]>(getPosts());
   const [draft, setDraft] = useState<DraftState | null>(null);
+  // 네이티브 confirm()은 일부 임베디드 브라우저(웹뷰)에서 닫힌 뒤 포커스/키보드 입력이
+  // 깨지는 경우가 있어서, 자체 확인 모달로 대체했다.
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
   function refresh() {
     setPosts(getPosts());
@@ -65,7 +68,6 @@ export function CommunityPage({ defaultAuthor }: CommunityPageProps) {
   }
 
   function handleDelete(id: string) {
-    if (!confirm("이 글을 삭제할까요?")) return;
     deletePost(id);
     refresh();
   }
@@ -157,12 +159,35 @@ export function CommunityPage({ defaultAuthor }: CommunityPageProps) {
             >
               수정
             </button>
-            <button type="button" onClick={() => handleDelete(post.id)}>
+            <button type="button" onClick={() => setConfirmingDeleteId(post.id)}>
               삭제
             </button>
           </div>
         </div>
       ))}
+
+      {confirmingDeleteId && (
+        <div className="community-page__confirm-overlay" onClick={() => setConfirmingDeleteId(null)}>
+          <div className="community-page__confirm-card" onClick={(e) => e.stopPropagation()}>
+            <p className="community-page__confirm-message">이 글을 삭제할까요?</p>
+            <div className="community-page__confirm-actions">
+              <button type="button" onClick={() => setConfirmingDeleteId(null)}>
+                취소
+              </button>
+              <button
+                type="button"
+                className="community-page__confirm-danger"
+                onClick={() => {
+                  handleDelete(confirmingDeleteId);
+                  setConfirmingDeleteId(null);
+                }}
+              >
+                삭제
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

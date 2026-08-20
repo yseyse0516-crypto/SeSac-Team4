@@ -1,4 +1,4 @@
-.signup-page {
+.auth-page {
   min-height: 100vh;
   display: flex;
   align-items: center;
@@ -6,7 +6,7 @@
   padding: 20px;
 }
 
-.signup-page__card {
+.auth-page__card {
   width: 100%;
   max-width: 360px;
   background: var(--surface);
@@ -17,20 +17,29 @@
   font-family: var(--font-sans);
 }
 
-.signup-page__title {
+.auth-page__title {
   font-size: 20px;
   font-weight: 700;
   color: var(--text);
   margin: 0 0 4px;
 }
 
-.signup-page__subtitle {
+.auth-page__subtitle {
   font-size: 13px;
   color: var(--text-sub);
   margin: 0 0 20px;
 }
 
-.signup-page__field {
+.auth-page__notice {
+  background: var(--secondary);
+  color: var(--primary);
+  font-size: 12px;
+  border-radius: var(--radius-control);
+  padding: 10px 12px;
+  margin: 0 0 16px;
+}
+
+.auth-page__field {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -39,7 +48,7 @@
   margin-bottom: 14px;
 }
 
-.signup-page__field input {
+.auth-page__field input {
   padding: 10px 12px;
   border-radius: var(--radius-control);
   border: 1px solid var(--border);
@@ -48,18 +57,18 @@
   font-size: 14px;
 }
 
-.signup-page__field input:focus {
+.auth-page__field input:focus {
   outline: none;
   border-color: var(--primary);
 }
 
-.signup-page__error {
+.auth-page__error {
   color: var(--level-packed);
   font-size: 12px;
   margin: -4px 0 12px;
 }
 
-.signup-page__submit {
+.auth-page__submit {
   width: 100%;
   background: var(--primary);
   color: white;
@@ -72,6 +81,20 @@
   margin-top: 4px;
 }
 
-.signup-page__submit:hover {
+.auth-page__submit:hover {
   background: var(--primary-hover);
+}
+
+.auth-page__link {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  padding: 0;
+  margin-top: 12px;
 }

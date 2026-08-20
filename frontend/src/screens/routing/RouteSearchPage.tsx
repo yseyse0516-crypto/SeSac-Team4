@@ -1,10 +1,8 @@
 import { useState } from "react";
 import { RouteSearchForm, type RouteSearchValues } from "../../components/routing/RouteSearchForm";
-import { RouteOverviewMap } from "../../components/routing/RouteOverviewMap";
 import { ViewModeToolbar, type ViewMode } from "../../components/routing/ViewModeToolbar";
 import { NearbyBikeDocks } from "../../components/routing/NearbyBikeDocks";
 import { RouteComparisonTable } from "../../components/routing/RouteComparisonTable";
-import { SubwayLineDiagram } from "../../components/routing/SubwayLineDiagram";
 import { fetchRoutes, RouteSearchError } from "../../api/routes";
 import type { RouteCandidate } from "../../types/routing";
 import "./RouteOptionsBar.css";
@@ -93,33 +91,27 @@ export function RouteSearchPage() {
   return (
     <div style={{ maxWidth: 720, margin: "0 auto", padding: "12px 20px" }}>
       <ViewModeToolbar value={viewMode} onChange={setViewMode} />
-      <RouteSearchForm onSearch={handleSearch} searchCategory={viewMode} />
+      <RouteSearchForm
+        onSearch={handleSearch}
+        searchCategory={viewMode}
+        routes={routes}
+        onlyRecommended={onlyRecommended}
+        showBikeToggle={viewMode === "bike"}
+      />
 
-      {(viewMode === "map" || viewMode === "bike") && (
-        <div className="route-options-bar">
-          <button
-            type="button"
-            className={
-              onlyRecommended
-                ? "route-options-bar__chip route-options-bar__chip--active"
-                : "route-options-bar__chip"
-            }
-            onClick={() => setOnlyRecommended((v) => !v)}
-          >
-            추천 경로만 보기
-          </button>
-        </div>
-      )}
-
-      {(viewMode === "map" || viewMode === "bike") && (
-        <RouteOverviewMap
-          routes={routes}
-          center={lastValues?.originCoords ?? PLACEHOLDER_ORIGIN}
-          showBikeToggle={viewMode === "bike"}
-          onlyRecommended={onlyRecommended}
-        />
-      )}
-      {viewMode === "subway" && <SubwayLineDiagram />}
+      <div className="route-options-bar">
+        <button
+          type="button"
+          className={
+            onlyRecommended
+              ? "route-options-bar__chip route-options-bar__chip--active"
+              : "route-options-bar__chip"
+          }
+          onClick={() => setOnlyRecommended((v) => !v)}
+        >
+          추천 경로만 보기
+        </button>
+      </div>
 
       {loading && <p style={{ color: "var(--text-sub)", fontSize: 13 }}>경로 탐색 중...</p>}
 

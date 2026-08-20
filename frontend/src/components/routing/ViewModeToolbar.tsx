@@ -4,7 +4,7 @@ import "./ViewModeToolbar.css";
 export type ViewMode = "map" | "subway" | "bike";
 
 const MODES: { key: ViewMode; label: string; icon: string }[] = [
-  { key: "map", label: "지도", icon: "🗺️" },
+  { key: "map", label: "전체", icon: "🗺️" },
   { key: "subway", label: "지하철", icon: "🚇" },
   { key: "bike", label: "자전거", icon: "🚲" },
 ];

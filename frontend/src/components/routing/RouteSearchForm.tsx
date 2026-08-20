@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { FAVORITE_STOPS, type FavoriteStop } from "../../constants/favoriteStops";
-import { LocationPickerMap } from "./LocationPickerMap";
+import { SearchMap } from "./SearchMap";
+import { SubwayLineDiagram } from "./SubwayLineDiagram";
 import { addRecentSearch, getRecentSearches, type SearchCategory } from "../../utils/recentSearches";
-import type { LatLng } from "../../types/routing";
+import type { LatLng, RouteCandidate } from "../../types/routing";
 import "./RouteSearchForm.css";
 
 // 출발지/도착지 + 즐겨찾기 + 탐색버튼. 기준시간 입력은 뺐다 — 실행하는 시점의 현재 시간
@@ -20,6 +21,9 @@ export interface RouteSearchValues {
 interface RouteSearchFormProps {
   onSearch: (values: RouteSearchValues) => void;
   searchCategory: SearchCategory;
+  routes: RouteCandidate[];
+  onlyRecommended: boolean;
+  showBikeToggle?: boolean;
 }
 
 // Geolocation 실패/미허용 시, 지도 placeholder의 기준점으로 쓸 서울시청 좌표.
@@ -27,7 +31,13 @@ const DEFAULT_CENTER: LatLng = { lat: 37.5665, lng: 126.978 };
 
 type ActivePicker = "origin" | "destination" | null;
 
-export function RouteSearchForm({ onSearch, searchCategory }: RouteSearchFormProps) {
+export function RouteSearchForm({
+  onSearch,
+  searchCategory,
+  routes,
+  onlyRecommended,
+  showBikeToggle,
+}: RouteSearchFormProps) {
   const [originText, setOriginText] = useState("");
   const [destinationText, setDestinationText] = useState("");
   const [originCoords, setOriginCoords] = useState<LatLng | null>(null);
@@ -95,6 +105,17 @@ export function RouteSearchForm({ onSearch, searchCategory }: RouteSearchFormPro
     } else if (activePicker === "destination") {
       setDestinationCoords(point);
       setDestinationText(label);
+    }
+    setActivePicker(null);
+  }
+
+  function handleStationPick(field: "origin" | "destination", station: LatLng & { name: string }) {
+    if (field === "origin") {
+      setOriginCoords(station);
+      setOriginText(`${station.name}역`);
+    } else {
+      setDestinationCoords(station);
+      setDestinationText(`${station.name}역`);
     }
     setActivePicker(null);
   }
@@ -213,14 +234,23 @@ export function RouteSearchForm({ onSearch, searchCategory }: RouteSearchFormPro
         </label>
       </div>
 
-      {activePicker && (
-        <LocationPickerMap
+      {searchCategory === "subway" ? (
+        <SubwayLineDiagram
+          activePicker={activePicker}
+          onPickStation={handleStationPick}
+          routes={routes}
+          onlyRecommended={onlyRecommended}
+        />
+      ) : (
+        <SearchMap
           center={
-            (activePicker === "origin" ? originCoords : destinationCoords) ??
-            originCoords ??
-            DEFAULT_CENTER
+            (activePicker === "origin" ? originCoords : destinationCoords) ?? originCoords ?? DEFAULT_CENTER
           }
+          activePicker={activePicker}
           onPick={handlePick}
+          routes={routes}
+          onlyRecommended={onlyRecommended}
+          showBikeToggle={showBikeToggle}
         />
       )}
 
