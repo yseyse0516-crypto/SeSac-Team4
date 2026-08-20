@@ -1,5 +1,8 @@
 # 개인 작업 메모 (팀 공용 문서는 backend.md 참고)
 plan.md
+docs/notes/
+docs/decisions/
+docs/prompts/
 
 # Python
 __pycache__/
