@@ -59,7 +59,7 @@ docker compose up -d db redis
 cd backend
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### 3. 오프라인 배치 (최초 1회 수동 실행 — 가중치 저장소를 채워야 API가 정상 동작합니다)
