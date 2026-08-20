@@ -562,12 +562,16 @@ bike_stock,candidate_log}.py`, `sql/*.sql`, `docker-compose.yml`)을 먼저 병�
   (search/board/auth/favorites) 전부 등록. `dev_server.py`/`candidate_log_stub.py`는
   이제 필요 없어져서 삭제함.
 - **`search.py`가 실제 `candidate_log`(Redis 기반) 사용**으로 전환 — 스텁 제거.
-- **검증 방법**: Docker Desktop이 이 환경에서 안 떠서 실제 Postgres/Redis는 못 띄워봤다.
-  대신 `TestClient`로 실제 `main.py` 전체를 띄워 확인함 — `/health`가 DB/Redis 없음을
-  `degraded`로 정확히 보고, `/auth/register`(프로세스 메모리)는 정상 동작, `/routes/search`는
-  오늘 실제로 소진된 ODsay 쿼터를 그대로 반영해 503을 정확히 반환함(§13 회로차단기가
-  실제 계정 상태로 검증된 셈). **⚠️ 실제 Postgres 연결 자체는 아직 라이브로 확인 못 함**
-  — Docker Desktop 띄운 뒤 `docker compose up -d` 한 번 더 확인 필요.
+- **검증 완료 (2026-08-20, Docker Desktop 기동 후)**: `docker compose up -d`로 실제
+  Postgres 16 + Redis 7을 띄우고 `main.py` 전체(B+A 라우터 전부)를 `TestClient`로
+  라이프사이클까지 포함해서 확인함. `/health` → `{"status":"ok","db":"ok","redis":"ok"}`,
+  `/bike/docks` → 실제 seed 데이터(강남역 2번출구 등) 정상 조회, `/coupons/1` → 실제
+  `coupon` 테이블 + Redis 재고(100/100) 정상, `/system/meta` 정상.
+- **⚠️ 실제로 발견하고 고친 버그 — `core/redis.py`가 이 환경의 redis-py/redis:7 조합에서
+  연결 자체가 안 됨.** `redis.Redis(...)` 기본 설정(HELLO로 RESP3 협상 시도)이
+  `unknown command 'HELLO'`로 실패했다 — `protocol=2`(RESP2 고정)로 해결. 이거 없었으면
+  쿠폰/따릉이 재고/검색 로그(candidate_log)가 전부 조용히 깨진 채로 배포됐을 것 — 실제
+  Postgres/Redis를 띄워서 검증한 덕에 발견함(TestClient만으론 이 버그를 못 잡았을 것).
 - **⚠️ 미해결 — `favorites` 테이블이 B의 스키마(`01_schema.sql`)에 없음.** `users`/
   `board_post`/`coupon`은 있는데 즐겨찾기 테이블이 빠져있다 — `favorite_service.py`는
   여전히 프로세스 메모리로 남겨둠(시간 부족 + 실 DB로 검증 못 한 상태에서 급하게 스키마
