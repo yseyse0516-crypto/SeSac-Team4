@@ -35,12 +35,8 @@ def _ensure_stock_key(coupon_id: int, total_stock: int) -> str:
 def _get_optional_user_id(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(_optional_bearer),
 ) -> Optional[int]:
-    """조회(GET)는 비로그인도 허용해야 해서, 실패해도 401 대신 None을 반환하는 버전.
-
-    발급(POST)은 A(정종우)의 auth_service.get_current_user_id를 그대로 쓴다(로그인 필수,
-    비로그인/만료/위조 토큰은 전부 401 LOGIN_REQUIRED) — 게시판과 같은 "조회는 공개, 계정에
-    남는 행위만 회원 전용" 원칙(2026-08-20 A 확인)을 그대로 따른다.
-    """
+    """조회(GET)는 비로그인도 허용해야 해서, 실패해도 401 대신 None을 반환한다.
+    발급(POST)은 auth_service.get_current_user_id로 로그인을 강제한다."""
     if credentials is None:
         return None
     try:
@@ -59,11 +55,7 @@ def get_coupon_info(
     coupon_id: int,
     user_id: Optional[int] = Depends(_get_optional_user_id),
 ) -> CouponInfo:
-    """쿠폰 정보 조회. 로그인 상태면 내가 이미 발급받았는지도 같이 알려준다.
-
-    커뮤니티 배너처럼 페이지를 열자마자(클릭 전에) '받음'/'받기' 상태를 그려야 하는
-    화면에서, POST .../claim을 미리 호출해보지 않고도 상태를 알 수 있게 하기 위함이다.
-    """
+    """쿠폰 정보 조회. 로그인 상태면 내가 이미 발급받았는지도 같이 알려준다."""
     coupon = _get_coupon(coupon_id)
     if coupon is None:
         raise HTTPException(status_code=404, detail="COUPON_NOT_FOUND")

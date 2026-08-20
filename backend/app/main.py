@@ -27,10 +27,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# include_router 순서 고정: A(search/auth/board/favorites) 먼저, B 나중.
-# A의 4개 라우터는 자체적으로 전체 경로("/api/v1/...")를 prefix로 갖고 있어서
-# 여기서 또 prefix="/api/v1"을 붙이면 경로가 두 번 겹친다(실제로 겹쳐서 발견,
-# 2026-08-20 통합 중 확인) — B의 라우터만 prefix가 없어서 여기서 붙여준다.
+# search/auth/board/favorites는 자체적으로 전체 경로("/api/v1/...")를 prefix로
+# 갖고 있어서 여기서 또 prefix를 붙이면 경로가 겹친다 — B의 라우터만 붙여준다.
 app.include_router(search.router)
 app.include_router(auth.router)
 app.include_router(board.router)

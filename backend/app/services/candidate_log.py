@@ -15,9 +15,8 @@ def request_key(request_id: int) -> str:
 def save_request(origin, destination) -> int:
     """요청 ID를 발급하고 빈 후보 목록으로 예약한다.
 
-    origin/destination은 좌표를 저장하지 않는다 — N-04(위치 이력 미저장)를 완전히
-    지키기 위해 스코어링에만 쓰고 버린다(Postgres 절삭 저장 방식에서 전환, request_id
-    발급 인터페이스는 A의 `search.py`와 동일하게 유지하기 위해 인자는 그대로 받는다).
+    origin/destination은 저장하지 않는다(N-04) — search.py와의 인터페이스를
+    유지하려고 인자는 그대로 받되, 스코어링 이후엔 버린다.
     """
     r = get_client()
     request_id = r.incr(_SEQ_KEY)

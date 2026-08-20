@@ -26,10 +26,8 @@ CREATE TABLE bus_stop (
 
 CREATE TABLE rental_dock (
     dock_id      SERIAL PRIMARY KEY,
-    -- 행정안전부 "전국 공영자전거 실시간 정보" API의 rntstnId(예: "ST-10")를 그대로 저장한다.
-    -- 서울시 원본 파일의 "대여소 번호"(예: "102")와는 다른 체계라 서로 매칭되지 않는 것을
-    -- 실제 API 응답으로 확인했다(docs/decisions/backend-b.md §3-1) — 원본 파일의 대여소
-    -- 번호를 그대로 넣지 않도록 주의. 배치가 아직 이 값을 채우지 않은 기존 행을 위해 NULL 허용.
+    -- 행안부 자전거 API의 rntstnId를 저장한다. 서울시 원본 파일의 "대여소 번호"와는
+    -- 다른 체계라 매칭 안 됨 — 배치가 아직 안 채운 행을 위해 NULL 허용.
     dock_std_id  VARCHAR(20) UNIQUE,
     dock_name    VARCHAR(100) NOT NULL,
     lat          NUMERIC(9,6) NOT NULL,
@@ -59,9 +57,7 @@ CREATE TABLE station_weight (
     dow               SMALLINT NOT NULL,    -- 0=월 .. 6=일
     net_onboard       NUMERIC(10,2),        -- 재차인원
     congestion_pct    NUMERIC(6,2),         -- %혼잡도 (Q1 subway_score = min(congestion_pct/150, 1.0))
-    stop_sequence     SMALLINT,             -- 정차순번 (Q3: A가 완만한 가우시안 감쇠로 재검토함 —
-                                             -- discount_factor = 1 - max(0, (K-stop_sequence)/K) * MAX_BONUS,
-                                             -- K=8·MAX_BONUS=0.3. 실제 계수 적용은 A의 services/scoring.py)
+    stop_sequence     SMALLINT,             -- 정차순번 (완만한 가우시안 감쇠 계수, 실제 적용은 services/scoring.py)
     UNIQUE (station_id, batch_id, time_slot, dow)
 );
 
@@ -87,19 +83,12 @@ CREATE TABLE dock_hub_distance (
 );
 
 -- ============================================================
--- 요청/추천 로그 — Postgres 테이블 없음 (2026-08-20 전환)
---
--- 기존에는 route_request/route_candidate 테이블에 좌표를 소수점 3자리로 절삭해
--- 저장했으나(N-04 대응, CLAUDE.md §4/§9 2026-08-19 확정 내용), 즐겨찾기(favorites)가
--- 이미 "영구 보관"을 전담하고 있어 이 두 테이블은 애초에 영구 저장될 이유가 없다는
--- 판단으로 Redis TTL 저장(backend/app/services/candidate_log.py, route:request:{id}
--- 키, 1시간 TTL)으로 전환했다. 좌표 자체를 아예 저장하지 않아 N-04를 더 엄격히
--- 지킨다. ⚠️ CLAUDE.md/backend.md의 "Postgres 확정" 문구는 아직 갱신 전 — 팀
--- 확인 필요(재우님 실제 스키마·PDF 원안과는 이 방향이 일치함).
+-- 요청/추천 로그는 Postgres 테이블 없음 — favorites가 영구 보관을 전담하므로
+-- Redis TTL(candidate_log.py, route:request:{id}, 1시간)로만 유지한다.
 -- ============================================================
 
 -- ============================================================
--- 로그인 / 게시판 (A 담당 기능, 컬럼 구성은 backend.md §11/§12 기준)
+-- 로그인 / 게시판
 -- ============================================================
 
 CREATE TABLE users (
@@ -111,9 +100,6 @@ CREATE TABLE users (
     created_at    TIMESTAMP NOT NULL DEFAULT now()
 );
 
--- application(auth_service.py)에서는 PK를 그냥 id로 부르지만, 이 프로젝트 스키마 관례(모든
--- PK가 <table>_id)를 따라 user_id로 둔다. 실제 SQL 연결 시 `SELECT user_id AS id` 정도로
--- 맞추면 된다.
 CREATE TABLE board_post (
     post_id       SERIAL PRIMARY KEY,
     owner_user_id INT NOT NULL REFERENCES users(user_id),
