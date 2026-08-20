@@ -78,6 +78,8 @@ CREATE TABLE bus_weight (
     time_slot      VARCHAR(20) NOT NULL,
     dow            SMALLINT NOT NULL,
     net_onboard    NUMERIC(10,2), -- Q1 bus_score = min(net_onboard/50, 1.0)
+    stop_sequence  SMALLINT, -- 정차순번 (backend.md §7.2/§7.3에서 A가 요청한 컬럼, 2026-08-20 배치 작업으로 추가.
+                              -- 서울시 노선별 정류소정보 마스터의 '정류장_순서'로 채운다 — bus_stop_sync.py/bus_weight_sync.py 참고)
     UNIQUE (stop_id, route_id, batch_id, time_slot, dow)
 );
 

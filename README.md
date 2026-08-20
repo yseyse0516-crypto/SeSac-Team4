@@ -67,8 +67,12 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ### 3. 오프라인 배치 (최초 1회 수동 실행 — 가중치 저장소를 채워야 API가 정상 동작합니다)
 ```bash
 cd backend
-python -m app.batch.run_monthly_batch
+pip install openpyxl   # bus_stop 마스터 파일(xlsx) 파싱에 필요
+python -m app.batch.run_batch
 ```
+`rental_dock` 단계는 행안부 실시간 API를 호출합니다(`BIKE_STOCK_API_KEY` 환경변수 필요) —
+키가 없으면 그 단계만 빈 결과로 넘어가고 나머지 단계는 정상 진행됩니다. 대여소만 단독으로
+재동기화하고 싶다면 `python -m app.batch.run_dock_batch`를 대신 쓰면 됩니다.
 
 ### 4. Frontend (별도 리포지토리)
 ```bash
@@ -127,3 +131,39 @@ npm run dev
 |---|---|
 | `backend/app/services/direction.py` | `determine_direction()` — 2호선은 원형 산술(외선/내선), 1·8호선은 물리순서 리스트 비교(동묘앞/남위례 역번호 예외 처리), 나머지 노선은 역번호 대소 비교. 2호선 지선(성수/신정)은 원형 규칙이 안 통해 의도적으로 `None`(중립값) 처리 |
 | `backend/tests/test_direction.py` | `direction.py` 단위 테스트 12개(원형 규칙, 지선 예외, 물리순서 예외, 퇴화 케이스 등) |
+
+## 브랜치: feature/batch-etl — main 대비 변경 내역
+
+`SeSac-Team4-zer0` 로컬 폴더에만 파일로 존재하고 git에는 한 번도 커밋된 적 없던 오프라인 배치(ETL) 스크립트를 이 저장소에 반영하는 브랜치입니다. `feature/station-weight-direction`과는 독립적으로 `main`에서 분기했습니다.
+
+### 수정된 파일 (3개)
+
+| 파일 | 변경 내용 |
+|---|---|
+| `backend/requirements.txt` | `openpyxl` 추가 (`bus_stop_sync.py`의 정류소 마스터 xlsx 파싱에 필요) |
+| `backend/sql/01_schema.sql` | `bus_weight`에 `stop_sequence` 컬럼 추가 — backend.md §7.2/§7.3에서 A(정종우)가 요청했던 컬럼. `bus_weight_sync.py`가 이미 이 컬럼이 있다고 가정하고 작성돼 있어서, 실제로 배치를 돌려보기 전까지는 드러나지 않았던 스키마 간극이었습니다 |
+| `README.md` | "실행 방법 §3 오프라인 배치" 절이 가리키던 존재하지 않는 `python -m app.batch.run_monthly_batch`를 실제 진입점 `run_batch`로 정정 |
+
+### 추가된 파일 (11개)
+
+| 파일 | 설명 |
+|---|---|
+| `backend/app/batch/__init__.py` | 패키지 초기화 |
+| `backend/app/batch/station_sync.py` | `station` 마스터 UPSERT |
+| `backend/app/batch/bus_stop_sync.py` | `bus_stop` 마스터 UPSERT (xlsx 파싱) |
+| `backend/app/batch/dock_master_sync.py` | `rental_dock` 마스터 UPSERT (행안부 실시간 API, `BIKE_STOCK_API_KEY` 필요 — 없으면 빈 결과로 스킵) |
+| `backend/app/batch/station_weight_sync.py` | 이번 `batch_id`로 `station_weight` INSERT (방향 포함) |
+| `backend/app/batch/bus_weight_sync.py` | 이번 `batch_id`로 `bus_weight` INSERT |
+| `backend/app/batch/dock_hub_distance_sync.py` | 이번 `batch_id`로 `dock_hub_distance` INSERT |
+| `backend/app/batch/run_batch.py` | 위 6단계를 `batch_run` 한 행으로 묶는 통합 러너 (신규 정식 진입점, `python -m app.batch.run_batch`) |
+| `backend/app/batch/run_dock_batch.py` | 대여소만 단독으로 재동기화하는 기존 러너 (참고용으로 유지) |
+| `backend/app/batch/data/*.xlsx`, `*.csv` (4개) | 배치가 읽는 원천 데이터 파일 |
+
+### 실제로 배치를 돌려보며 발견해 함께 고친 버그 2건
+
+1. **커넥션 풀 미개방**: `run_batch.py`/`run_dock_batch.py`가 `main.py`의 FastAPI lifespan(`pool.open()`/`.close()`)에만 의존하고 있어, 독립 프로세스로 실행하면 `psycopg_pool.PoolClosed`로 즉시 실패했습니다. `.env` 로딩도 빠져 있었습니다. → 두 러너 모두 자체적으로 `load_dotenv()` + `pool.open()`/`.close()`를 하도록 수정.
+2. **FK 트리거 비활성화 권한 문제**: `bus_weight_sync.py`/`dock_hub_distance_sync.py`의 대량 병합 최적화가 `ALTER TABLE ... DISABLE TRIGGER ALL`로 FK 트리거를 끄는 방식이었는데, FK RI 트리거는 시스템 트리거라 테이블 소유자라도 superuser가 아니면 `permission denied: ... is a system trigger`로 실패합니다(운영 DB 계정도 superuser가 아닐 것이므로 그대로면 운영에서도 항상 실패했을 것). → FK 제약을 `DROP` 했다가 병합 후 다시 `ADD`하는 방식(소유자 권한만 필요)으로 교체.
+
+### 검증
+
+로컬 Postgres(이 저장소의 스키마 그대로, tangtang 역할)에 대해 `python -m app.batch.run_batch`를 실제로 끝까지 실행: `station=269건`, `bus_stop=12898건`, `station_weight=75320건`, `bus_weight=4565880건`(`stop_sequence` 채워짐), `dock_hub_distance=405건`, `rental_dock=0건`(API 키 없어 정상 스킵). 이후 DB를 깨끗한 시드 상태로 리셋하고 `pytest` 전체 110/110 통과 확인(배치 코드 추가가 기존 테스트에 영향 없음).
