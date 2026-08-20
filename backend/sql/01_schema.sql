@@ -59,7 +59,9 @@ CREATE TABLE station_weight (
     dow               SMALLINT NOT NULL,    -- 0=월 .. 6=일
     net_onboard       NUMERIC(10,2),        -- 재차인원
     congestion_pct    NUMERIC(6,2),         -- %혼잡도 (Q1 subway_score = min(congestion_pct/150, 1.0))
-    stop_sequence     SMALLINT,             -- 정차순번 (Q3 감산 계수: stop_sequence <= 3이면 score *= 0.7)
+    stop_sequence     SMALLINT,             -- 정차순번 (Q3: A가 완만한 가우시안 감쇠로 재검토함 —
+                                             -- discount_factor = 1 - max(0, (K-stop_sequence)/K) * MAX_BONUS,
+                                             -- K=8·MAX_BONUS=0.3. 실제 계수 적용은 A의 services/scoring.py)
     UNIQUE (station_id, batch_id, time_slot, dow)
 );
 
@@ -105,10 +107,42 @@ CREATE TABLE route_candidate (
     congestion_score         NUMERIC(6,3),
     minute_improvement_ratio NUMERIC(6,3),
     is_recommended           BOOLEAN NOT NULL DEFAULT FALSE,
+    -- A의 /search 응답에 is_recommended와 별도로 존재하는 "최단시간 후보" 플래그(비교 화면용).
+    -- 이걸 안 남기면 GET /routes/{request_id}로 과거 결과를 다시 조회할 때 두 후보 중
+    -- 뭐가 최단시간이었는지 알 길이 없어진다.
+    is_fastest               BOOLEAN NOT NULL DEFAULT FALSE,
     created_at               TIMESTAMP NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_route_candidate_request_id ON route_candidate(request_id);
+
+-- ============================================================
+-- 로그인 / 게시판 (A 담당 기능, 컬럼 구성은 backend.md §11/§12 기준)
+-- ============================================================
+
+CREATE TABLE users (
+    user_id       SERIAL PRIMARY KEY,
+    username      VARCHAR(20) NOT NULL UNIQUE, -- 영문/숫자/_ 3~20자
+    password_hash VARCHAR(255) NOT NULL,       -- bcrypt 해시만 저장(평문·단순해시 금지)
+    nickname      VARCHAR(50) NOT NULL,
+    role          VARCHAR(20) NOT NULL DEFAULT 'member', -- 지금은 미사용 — RBAC 도입 시 이 컬럼으로 확장
+    created_at    TIMESTAMP NOT NULL DEFAULT now()
+);
+
+-- application(auth_service.py)에서는 PK를 그냥 id로 부르지만, 이 프로젝트 스키마 관례(모든
+-- PK가 <table>_id)를 따라 user_id로 둔다. 실제 SQL 연결 시 `SELECT user_id AS id` 정도로
+-- 맞추면 된다.
+CREATE TABLE board_post (
+    post_id       SERIAL PRIMARY KEY,
+    owner_user_id INT NOT NULL REFERENCES users(user_id),
+    nickname      VARCHAR(50) NOT NULL, -- 작성 시점 계정 닉네임 스냅샷(매번 JOIN하지 않음)
+    content       TEXT NOT NULL,
+    created_at    TIMESTAMP NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMP NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_board_post_owner ON board_post(owner_user_id);
+CREATE INDEX idx_board_post_created_at ON board_post(created_at DESC);
 
 -- ============================================================
 -- 선착순 쿠폰 (조건부 기능) — 정의만 DB에 두고, 실제 재고 차감은
