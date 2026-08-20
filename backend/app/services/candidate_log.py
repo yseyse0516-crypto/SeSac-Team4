@@ -1,53 +1,52 @@
-from app.core.db import get_cursor
+import json
+
+from app.core.redis import get_client
+
+# 즐겨찾기(favorites)가 "영구 보관"을 전담하므로, 검색 결과 재조회는 짧은 TTL만 허용한다.
+# TTL이 지나면 GET /routes/{request_id}는 404를 반환한다(즐겨찾기하지 않은 결과는 재현 불가 — 의도된 동작).
+_TTL_SECONDS = 3600
+_SEQ_KEY = "route:request:seq"
+
+
+def request_key(request_id: int) -> str:
+    return f"route:request:{request_id}"
 
 
 def save_request(origin, destination) -> int:
-    """route_request INSERT → request_id 반환. 좌표는 소수점 3자리 절삭(N-04, 약 100m 격자).
+    """요청 ID를 발급하고 빈 후보 목록으로 예약한다.
 
-    origin/destination은 lat/lng 속성을 가진 객체를 받는다 — A의 /search가
-    `candidate_log.save_request(payload.origin, payload.destination)`처럼 스키마 객체를
-    그대로 넘기므로(backend/app/routers/search.py), 위경도를 낱개 인자로 받지 않는다.
+    origin/destination은 좌표를 저장하지 않는다 — N-04(위치 이력 미저장)를 완전히
+    지키기 위해 스코어링에만 쓰고 버린다(Postgres 절삭 저장 방식에서 전환, request_id
+    발급 인터페이스는 A의 `search.py`와 동일하게 유지하기 위해 인자는 그대로 받는다).
     """
-    with get_cursor() as cur:
-        cur.execute(
-            "INSERT INTO route_request (origin_lat, origin_lng, dest_lat, dest_lng) "
-            "VALUES (trunc(%(origin_lat)s::numeric, 3), trunc(%(origin_lng)s::numeric, 3), "
-            "trunc(%(dest_lat)s::numeric, 3), trunc(%(dest_lng)s::numeric, 3))",
-            {
-                "origin_lat": origin.lat,
-                "origin_lng": origin.lng,
-                "dest_lat": destination.lat,
-                "dest_lng": destination.lng,
-            },
-        )
-        cur.execute("SELECT lastval() AS request_id")
-        return cur.fetchone()["request_id"]
+    r = get_client()
+    request_id = r.incr(_SEQ_KEY)
+    r.set(request_key(request_id), json.dumps({"candidates": []}), ex=_TTL_SECONDS)
+    return request_id
 
 
 def save_candidates(request_id: int, candidates: list[dict]) -> None:
-    """route_candidate 일괄 INSERT.
+    """예약된 요청 레코드에 후보 목록을 채운다.
 
     candidates 각 항목 필수 키: path_type, total_time_min, congestion_score,
-    minute_improvement_ratio, is_recommended
+    minute_improvement_ratio, is_recommended, is_fastest
     """
     if not candidates:
         return
-    with get_cursor() as cur:
-        cur.executemany(
-            "INSERT INTO route_candidate "
-            "(request_id, path_type, total_time_min, congestion_score, "
-            "minute_improvement_ratio, is_recommended) "
-            "VALUES (%(request_id)s, %(path_type)s, %(total_time_min)s, "
-            "%(congestion_score)s, %(minute_improvement_ratio)s, %(is_recommended)s)",
-            [
-                {
-                    "request_id": request_id,
-                    "path_type": c["path_type"],
-                    "total_time_min": c["total_time_min"],
-                    "congestion_score": c.get("congestion_score"),
-                    "minute_improvement_ratio": c.get("minute_improvement_ratio"),
-                    "is_recommended": c["is_recommended"],
-                }
-                for c in candidates
-            ],
-        )
+    r = get_client()
+    key = request_key(request_id)
+    ttl = r.ttl(key)
+    payload = {
+        "candidates": [
+            {
+                "path_type": c["path_type"],
+                "total_time_min": c["total_time_min"],
+                "congestion_score": c.get("congestion_score"),
+                "minute_improvement_ratio": c.get("minute_improvement_ratio"),
+                "is_recommended": c["is_recommended"],
+                "is_fastest": c.get("is_fastest", False),
+            }
+            for c in candidates
+        ]
+    }
+    r.set(key, json.dumps(payload), ex=ttl if ttl and ttl > 0 else _TTL_SECONDS)

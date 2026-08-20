@@ -7,6 +7,7 @@ class RouteCandidate(BaseModel):
     congestion_score: float | None = None
     minute_improvement_ratio: float | None = None
     is_recommended: bool
+    is_fastest: bool = False
 
 
 class RouteResult(BaseModel):

@@ -87,34 +87,16 @@ CREATE TABLE dock_hub_distance (
 );
 
 -- ============================================================
--- 요청/추천 로그 (N-04 대응: 좌표 소수점 3자리 절삭 = 약 100m 격자, 사용자 식별자 없음)
+-- 요청/추천 로그 — Postgres 테이블 없음 (2026-08-20 전환)
+--
+-- 기존에는 route_request/route_candidate 테이블에 좌표를 소수점 3자리로 절삭해
+-- 저장했으나(N-04 대응, CLAUDE.md §4/§9 2026-08-19 확정 내용), 즐겨찾기(favorites)가
+-- 이미 "영구 보관"을 전담하고 있어 이 두 테이블은 애초에 영구 저장될 이유가 없다는
+-- 판단으로 Redis TTL 저장(backend/app/services/candidate_log.py, route:request:{id}
+-- 키, 1시간 TTL)으로 전환했다. 좌표 자체를 아예 저장하지 않아 N-04를 더 엄격히
+-- 지킨다. ⚠️ CLAUDE.md/backend.md의 "Postgres 확정" 문구는 아직 갱신 전 — 팀
+-- 확인 필요(재우님 실제 스키마·PDF 원안과는 이 방향이 일치함).
 -- ============================================================
-
-CREATE TABLE route_request (
-    request_id   SERIAL PRIMARY KEY,
-    origin_lat   NUMERIC(6,3) NOT NULL,
-    origin_lng   NUMERIC(6,3) NOT NULL,
-    dest_lat     NUMERIC(6,3) NOT NULL,
-    dest_lng     NUMERIC(6,3) NOT NULL,
-    requested_at TIMESTAMP NOT NULL DEFAULT now()
-);
-
-CREATE TABLE route_candidate (
-    candidate_id             SERIAL PRIMARY KEY,
-    request_id               INT NOT NULL REFERENCES route_request(request_id),
-    path_type                VARCHAR(20) NOT NULL, -- 'SUBWAY' | 'BUS' | 'BIKE' | 'MIXED'
-    total_time_min           NUMERIC(6,2) NOT NULL,
-    congestion_score         NUMERIC(6,3),
-    minute_improvement_ratio NUMERIC(6,3),
-    is_recommended           BOOLEAN NOT NULL DEFAULT FALSE,
-    -- A의 /search 응답에 is_recommended와 별도로 존재하는 "최단시간 후보" 플래그(비교 화면용).
-    -- 이걸 안 남기면 GET /routes/{request_id}로 과거 결과를 다시 조회할 때 두 후보 중
-    -- 뭐가 최단시간이었는지 알 길이 없어진다.
-    is_fastest               BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at               TIMESTAMP NOT NULL DEFAULT now()
-);
-
-CREATE INDEX idx_route_candidate_request_id ON route_candidate(request_id);
 
 -- ============================================================
 -- 로그인 / 게시판 (A 담당 기능, 컬럼 구성은 backend.md §11/§12 기준)
