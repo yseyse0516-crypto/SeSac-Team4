@@ -19,6 +19,10 @@ class MatchResult:
     matched: bool
     station_id: Optional[int] = None
     stop_id: Optional[int] = None
+    # 2026-08-20 수정: direction.determine_direction() 계산에 필요해서 추가.
+    # 지하철 매칭 성공 시에만 채워짐(버스는 방향 개념이 없어 항상 None).
+    line_name: Optional[str] = None
+    station_no: Optional[str] = None
 
 
 def _haversine_m(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -34,16 +38,21 @@ def match_subway_station(lat: Optional[float], lng: Optional[float]) -> MatchRes
     if lat is None or lng is None:
         return MatchResult(matched=False)
 
-    nearest_id: Optional[int] = None
+    nearest: Optional[object] = None
     nearest_dist = SUBWAY_MATCH_RADIUS_M
     for st in STATION_MASTER:
         dist = _haversine_m(lat, lng, st.lat, st.lng)
         if dist <= nearest_dist:
-            nearest_id, nearest_dist = st.station_id, dist
+            nearest, nearest_dist = st, dist
 
-    if nearest_id is None:
+    if nearest is None:
         return MatchResult(matched=False)
-    return MatchResult(matched=True, station_id=nearest_id)
+    return MatchResult(
+        matched=True,
+        station_id=nearest.station_id,
+        line_name=nearest.line_name,
+        station_no=nearest.station_no,
+    )
 
 
 def match_bus_stop(stop_std_id: Optional[str]) -> MatchResult:

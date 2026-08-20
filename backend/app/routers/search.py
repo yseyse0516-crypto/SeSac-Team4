@@ -6,11 +6,13 @@ ODsay 1회 호출 → 좌표 매칭(Q4) → 혼잡 스코어링(Q1/Q3) → 분�
 담당: 정종우(A). main.py/core/*는 B 담당이라 여기서 건드리지 않는다.
 """
 import os
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 
 from app.schemas.route import Candidate, Coordinate, SearchRequest, SearchResponse, Segment
 from app.services import candidate_log
+from app.services import direction as direction_service
 from app.services import filtering, line_geometry, matching, scoring, walk_geometry
 from app.services.hardcoded_weights import BUS_WEIGHT, STATION_WEIGHT
 from app.services.odsay_client import (
@@ -59,14 +61,18 @@ def search_routes(payload: SearchRequest) -> SearchResponse:
         response_segments: list[Segment] = []
 
         for seg in pc.segments:
-            match = _match_segment(seg)
-            seg_score = scoring.score_segment(seg.mode, match)
+            match, direction = _match_segment(seg)
+            seg_score = scoring.score_segment(seg.mode, match, direction)
             if seg_score is not None:
                 segment_scores.append((seg.duration_min, seg_score))
 
             stop_sequence = None
             if seg.mode == "subway" and match.station_id is not None:
-                weight = STATION_WEIGHT.get(match.station_id)
+                # 2026-08-20 수정: STATION_WEIGHT 키가 station_id 단독에서
+                # (station_id, direction)으로 바뀜(hardcoded_weights.py 참고) — 이 조회도
+                # 같이 바꿔야 한다. direction=None이면 어차피 그 조합의 행이 없으므로
+                # stop_sequence도 자연히 None(중립)이 된다.
+                weight = STATION_WEIGHT.get((match.station_id, direction))
                 stop_sequence = weight.stop_sequence if weight else None
             elif seg.mode == "bus" and match.stop_id is not None:
                 weight = BUS_WEIGHT.get(match.stop_id)
@@ -105,6 +111,7 @@ def search_routes(payload: SearchRequest) -> SearchResponse:
                     route_id=seg.route_id,
                     stop_sequence=stop_sequence,
                     matched=match.matched,
+                    direction=direction,
                     polyline=polyline,
                 )
             )
@@ -152,9 +159,23 @@ def _validate_coordinates(payload: SearchRequest) -> None:
             raise HTTPException(status_code=400, detail={"code": "INVALID_INPUT"})
 
 
-def _match_segment(seg: ParsedSegment) -> matching.MatchResult:
+def _match_segment(seg: ParsedSegment) -> tuple[matching.MatchResult, Optional[str]]:
+    """세그먼트를 매칭하고(Q4), 지하철이면 방향(direction.py)까지 계산해 함께 반환한다.
+
+    응답에 쓰이는 대표 매칭 결과(station_id 등)는 지금까지와 동일하게 탑승역
+    (시작역) 기준이다 — 하차역은 방향 계산에만 쓰고 별도로 노출하지 않는다.
+    """
     if seg.mode == "subway":
-        return matching.match_subway_station(seg.start_lat, seg.start_lng)
+        start_match = matching.match_subway_station(seg.start_lat, seg.start_lng)
+        if not start_match.matched:
+            return start_match, None
+        end_match = matching.match_subway_station(seg.end_lat, seg.end_lng)
+        if not end_match.matched:
+            return start_match, None
+        direction = direction_service.determine_direction(
+            start_match.line_name, start_match.station_no, end_match.station_no
+        )
+        return start_match, direction
     if seg.mode == "bus":
-        return matching.match_bus_stop(seg.stop_std_id)
-    return matching.MatchResult(matched=False)
+        return matching.match_bus_stop(seg.stop_std_id), None
+    return matching.MatchResult(matched=False), None

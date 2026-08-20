@@ -36,6 +36,12 @@ class Segment(BaseModel):
     stop_sequence: Optional[int] = None
     matched: bool = True
 
+    # 2026-08-20 수정: 지하철 구간의 station_weight 조회 방향(상선/하선/내선/외선).
+    # direction.py에서 계산 — 버스 구간이거나 판정 불가(지선 등 예외, Q4 매칭 실패)면
+    # None이며, 이 경우 congestion_score는 중립값(0.5)으로 계산됐다는 뜻이다.
+    # 프론트/디버깅에서 "왜 이 값이 나왔는지" 확인하는 용도로 노출한다.
+    direction: Optional[str] = None
+
     # 지하철·버스·도보 구간의 실제 경로 곡선 (backend.md §6.1~§6.3, §13 — 도보는 Tmap
     # 키 발급 후 반영). None이면 매칭 실패/키 미설정/조회 실패 — 프론트는 이 경우
     # start/end를 직선으로 이어서 그리면 됨.

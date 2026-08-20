@@ -14,11 +14,27 @@ def test_unmatched_segment_gets_neutral_score():
 
 
 def test_subway_score_uses_congestion_pct_and_divisor():
-    # station_id=1 (답십리): congestion_pct=40.0, stop_sequence=1 → 거의 최대 보너스 구간
-    score = scoring.score_segment("subway", MatchResult(matched=True, station_id=1))
+    # station_id=1 (답십리), direction="상선": congestion_pct=40.0, stop_sequence=1
+    # → 거의 최대 보너스 구간 (hardcoded_weights.STATION_WEIGHT[(1, "상선")])
+    score = scoring.score_segment("subway", MatchResult(matched=True, station_id=1), "상선")
     base = min(40.0 / scoring.SUBWAY_CONGESTION_DIVISOR, 1.0)
     discount = scoring.stop_sequence_discount(1)
     assert score == pytest.approx(base * discount)
+
+
+def test_subway_score_differs_by_direction():
+    # 2026-08-20 추가: 같은 station_id라도 direction이 다르면 다른 행이 조회돼야 한다
+    # — station_weight의 UNIQUE 키에 direction이 추가된 것이 실제로 반영됐는지 확인.
+    up = scoring.score_segment("subway", MatchResult(matched=True, station_id=1), "상선")
+    down = scoring.score_segment("subway", MatchResult(matched=True, station_id=1), "하선")
+    assert up != down
+
+
+def test_subway_score_with_no_direction_is_neutral():
+    # direction 판정 실패(예: 2호선 지선, 시작=도착 등)는 None으로 넘어온다 —
+    # 있지도 않은 방향 값을 임의로 골라 쓰지 않고 중립값으로 처리해야 한다.
+    score = scoring.score_segment("subway", MatchResult(matched=True, station_id=1), None)
+    assert score == scoring.NEUTRAL_CONGESTION_SCORE
 
 
 def test_bus_score_uses_net_onboard_and_divisor():
