@@ -1,16 +1,13 @@
 """커뮤니티 게시판 CRUD.
 
-⚠️ 임시 구현 — 서버 프로세스 메모리에만 저장한다(재시작하면 게시글이 사라짐). B의
-core/db.py(PostgreSQL 커넥션 풀)가 붙으면 이 파일 내부만 실제 SQL(psycopg, raw SQL,
-파라미터 바인딩)로 교체하면 된다 — 라우터/스키마는 이미 그 형태를 가정하고 만들어서
-바뀔 필요 없음 (backend.md §11/§12 참고).
-
-작성자 식별은 로그인 계정의 user_id로 한다(2026-08-19 저녁부터 — 그 전엔 X-Client-Token
-익명 토큰 방식이었으나 로그인 기능 추가로 대체됨, §12 참고).
+작성자 식별은 로그인 계정의 user_id로 한다.
 """
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from itertools import count
+from datetime import datetime
+
+from app.core import db
+
+_POST_COLUMNS = "post_id AS id, nickname, content, owner_user_id, created_at, updated_at"
 
 
 @dataclass
@@ -31,51 +28,66 @@ class NotPostOwnerError(Exception):
     pass
 
 
-_posts: dict[int, Post] = {}
-_next_id = count(1)
+def _row_to_post(row: dict) -> Post:
+    return Post(
+        id=row["id"],
+        nickname=row["nickname"],
+        content=row["content"],
+        owner_user_id=row["owner_user_id"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
 
 
 def create_post(nickname: str, content: str, owner_user_id: int) -> Post:
-    now = datetime.now(timezone.utc)
-    post = Post(
-        id=next(_next_id),
-        nickname=nickname,
-        content=content,
-        owner_user_id=owner_user_id,
-        created_at=now,
-        updated_at=now,
-    )
-    _posts[post.id] = post
-    return post
+    with db.get_cursor() as cur:
+        cur.execute(
+            "INSERT INTO board_post (owner_user_id, nickname, content) VALUES (%s, %s, %s)",
+            (owner_user_id, nickname, content),
+        )
+        cur.execute(f"SELECT {_POST_COLUMNS} FROM board_post WHERE post_id = lastval()")
+        return _row_to_post(cur.fetchone())
 
 
 def list_posts(limit: int = 20, offset: int = 0) -> list[Post]:
-    ordered = sorted(_posts.values(), key=lambda p: p.created_at, reverse=True)
-    return ordered[offset : offset + limit]
+    with db.get_cursor() as cur:
+        cur.execute(
+            f"SELECT {_POST_COLUMNS} FROM board_post ORDER BY created_at DESC LIMIT %s OFFSET %s",
+            (limit, offset),
+        )
+        return [_row_to_post(row) for row in cur.fetchall()]
 
 
 def count_posts() -> int:
-    return len(_posts)
+    with db.get_cursor() as cur:
+        cur.execute("SELECT COUNT(*) AS n FROM board_post")
+        return cur.fetchone()["n"]
 
 
 def get_post(post_id: int) -> Post:
-    post = _posts.get(post_id)
-    if post is None:
+    with db.get_cursor() as cur:
+        cur.execute(f"SELECT {_POST_COLUMNS} FROM board_post WHERE post_id = %s", (post_id,))
+        row = cur.fetchone()
+    if row is None:
         raise PostNotFoundError(post_id)
-    return post
+    return _row_to_post(row)
 
 
 def update_post(post_id: int, content: str, owner_user_id: int) -> Post:
     post = get_post(post_id)
     if post.owner_user_id != owner_user_id:
         raise NotPostOwnerError(post_id)
-    post.content = content
-    post.updated_at = datetime.now(timezone.utc)
-    return post
+    with db.get_cursor() as cur:
+        cur.execute(
+            "UPDATE board_post SET content = %s, updated_at = now() WHERE post_id = %s",
+            (content, post_id),
+        )
+    return get_post(post_id)
 
 
 def delete_post(post_id: int, owner_user_id: int) -> None:
     post = get_post(post_id)
     if post.owner_user_id != owner_user_id:
         raise NotPostOwnerError(post_id)
-    del _posts[post_id]
+    with db.get_cursor() as cur:
+        cur.execute("DELETE FROM board_post WHERE post_id = %s", (post_id,))

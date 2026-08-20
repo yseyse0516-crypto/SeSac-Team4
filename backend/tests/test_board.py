@@ -1,15 +1,15 @@
 """POST /api/v1/board/posts 등 커뮤니티 게시판 CRUD 통합 테스트.
 
 작성/수정/삭제는 로그인 필요(§12) — auth_service로 직접 사용자를 만들고 JWT를 발급해서
-Authorization: Bearer 헤더로 보낸다(HTTP로 회원가입까지 거칠 필요 없음, auth_service의
-메모리 저장소를 그대로 공유하므로).
+Authorization: Bearer 헤더로 보낸다(HTTP로 회원가입까지 거칠 필요 없음).
 """
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.core import db
 from app.routers.board import router
-from app.services import auth_service, board_service
+from app.services import auth_service
 
 app = FastAPI()
 app.include_router(router)
@@ -18,13 +18,9 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def _reset_state():
-    board_service._posts.clear()
-    auth_service._users_by_username.clear()
-    auth_service._users_by_id.clear()
+    with db.get_cursor() as cur:
+        cur.execute("TRUNCATE users, board_post, favorite RESTART IDENTITY CASCADE")
     yield
-    board_service._posts.clear()
-    auth_service._users_by_username.clear()
-    auth_service._users_by_id.clear()
 
 
 def _make_user(username="alice", nickname="앨리스"):

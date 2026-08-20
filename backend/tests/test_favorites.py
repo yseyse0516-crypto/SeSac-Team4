@@ -3,8 +3,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.core import db
 from app.routers.favorites import router
-from app.services import auth_service, favorite_service
+from app.services import auth_service
 
 app = FastAPI()
 app.include_router(router)
@@ -19,13 +20,9 @@ FAVORITE_BODY = {
 
 @pytest.fixture(autouse=True)
 def _reset_state():
-    favorite_service._favorites.clear()
-    auth_service._users_by_username.clear()
-    auth_service._users_by_id.clear()
+    with db.get_cursor() as cur:
+        cur.execute("TRUNCATE users, board_post, favorite RESTART IDENTITY CASCADE")
     yield
-    favorite_service._favorites.clear()
-    auth_service._users_by_username.clear()
-    auth_service._users_by_id.clear()
 
 
 def _make_token(username="alice"):

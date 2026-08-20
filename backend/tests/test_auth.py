@@ -3,8 +3,8 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.core import db
 from app.routers.auth import router
-from app.services import auth_service
 
 app = FastAPI()
 app.include_router(router)
@@ -13,11 +13,9 @@ client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def _reset_state():
-    auth_service._users_by_username.clear()
-    auth_service._users_by_id.clear()
+    with db.get_cursor() as cur:
+        cur.execute("TRUNCATE users, board_post, favorite RESTART IDENTITY CASCADE")
     yield
-    auth_service._users_by_username.clear()
-    auth_service._users_by_id.clear()
 
 
 def _register(username="alice", password="password123", nickname="앨리스"):

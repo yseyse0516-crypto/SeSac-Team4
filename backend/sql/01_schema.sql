@@ -121,6 +121,20 @@ CREATE TABLE board_post (
 CREATE INDEX idx_board_post_owner ON board_post(owner_user_id);
 CREATE INDEX idx_board_post_created_at ON board_post(created_at DESC);
 
+-- 즐겨찾기: 출발-도착 좌표 조합을 저장(특정 역/정류장이 아님). 회원 전용.
+CREATE TABLE favorite (
+    favorite_id  SERIAL PRIMARY KEY,
+    user_id      INT NOT NULL REFERENCES users(user_id),
+    label        VARCHAR(20) NOT NULL,
+    origin_lat   NUMERIC(9,6) NOT NULL,
+    origin_lng   NUMERIC(9,6) NOT NULL,
+    dest_lat     NUMERIC(9,6) NOT NULL,
+    dest_lng     NUMERIC(9,6) NOT NULL,
+    created_at   TIMESTAMP NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_favorite_user ON favorite(user_id);
+
 -- ============================================================
 -- 선착순 쿠폰 (조건부 기능) — 정의만 DB에 두고, 실제 재고 차감은
 -- backend/app/routers/coupon.py에서 Redis(coupon:{id}:stock 등)로 원자적으로 처리한다.

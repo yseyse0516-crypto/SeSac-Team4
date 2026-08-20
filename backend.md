@@ -509,8 +509,12 @@ JWT를 쓰는 이유가 옅어진다 — 이번 스프린트에서는 과한 대
   (id PK, user_id FK, label, origin_lat/lng, destination_lat/lng, created_at) 테이블이
   스키마에 없음 — `01_schema.sql`에 추가 필요(김재우님/B 확인).
 - `board_post`도 아직 스키마에 없음(§11에 이미 기록) — 이번에 `owner_user_id`(FK)로 바뀜.
-- 지금은 전부(users/board_post/favorite) 프로세스 메모리 저장 — 재시작하면 사라짐. 실제
-  DB 연동은 내일 오전 A·B 통합 때 함께 처리.
+- **[2026-08-20 갱신, 백엔드 B]** 실제 DB 연동 완료. `01_schema.sql`에 `favorite` 테이블
+  추가, `auth_service.py`/`board_service.py`/`favorite_service.py`를 프로세스 메모리에서
+  실제 Postgres 쿼리로 교체함(다른 프로세스 간에도 계정/글/즐겨찾기가 그대로 보이는 것까지
+  확인) — k8s로 복제본 여러 개를 띄우면 프로세스 메모리 저장은 파드마다 따로 놀아서
+  깨지기 때문에 다음 주 배포 작업 전에 먼저 처리했다. 인터페이스(함수 시그니처/반환 타입)는
+  그대로라 라우터 쪽은 변경 없음.
 
 ### 구현 위치
 

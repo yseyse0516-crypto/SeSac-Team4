@@ -1,13 +1,14 @@
-"""즐겨찾기(자주 쓰는 출발-도착 경로) CRUD.
-
-⚠️ 임시 구현 — 프로세스 메모리 저장(board_service.py와 동일한 패턴). B의 core/db.py가
-붙으면 이 파일 내부만 실제 SQL로 교체하면 된다.
-"""
+"""즐겨찾기(자주 쓰는 출발-도착 경로) CRUD."""
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from itertools import count
+from datetime import datetime
 
+from app.core import db
 from app.schemas.route import Coordinate
+
+_FAVORITE_COLUMNS = (
+    "favorite_id AS id, user_id, label, "
+    "origin_lat, origin_lng, dest_lat, dest_lng, created_at"
+)
 
 
 @dataclass
@@ -28,32 +29,43 @@ class NotFavoriteOwnerError(Exception):
     pass
 
 
-_favorites: dict[int, Favorite] = {}
-_next_id = count(1)
+def _row_to_favorite(row: dict) -> Favorite:
+    return Favorite(
+        id=row["id"],
+        user_id=row["user_id"],
+        label=row["label"],
+        origin=Coordinate(lat=row["origin_lat"], lng=row["origin_lng"]),
+        destination=Coordinate(lat=row["dest_lat"], lng=row["dest_lng"]),
+        created_at=row["created_at"],
+    )
 
 
 def create_favorite(user_id: int, label: str, origin: Coordinate, destination: Coordinate) -> Favorite:
-    fav = Favorite(
-        id=next(_next_id),
-        user_id=user_id,
-        label=label,
-        origin=origin,
-        destination=destination,
-        created_at=datetime.now(timezone.utc),
-    )
-    _favorites[fav.id] = fav
-    return fav
+    with db.get_cursor() as cur:
+        cur.execute(
+            "INSERT INTO favorite (user_id, label, origin_lat, origin_lng, dest_lat, dest_lng) "
+            "VALUES (%s, %s, %s, %s, %s, %s)",
+            (user_id, label, origin.lat, origin.lng, destination.lat, destination.lng),
+        )
+        cur.execute(f"SELECT {_FAVORITE_COLUMNS} FROM favorite WHERE favorite_id = lastval()")
+        return _row_to_favorite(cur.fetchone())
 
 
 def list_favorites(user_id: int) -> list[Favorite]:
-    mine = [f for f in _favorites.values() if f.user_id == user_id]
-    return sorted(mine, key=lambda f: f.created_at, reverse=True)
+    with db.get_cursor() as cur:
+        cur.execute(
+            f"SELECT {_FAVORITE_COLUMNS} FROM favorite WHERE user_id = %s ORDER BY created_at DESC",
+            (user_id,),
+        )
+        return [_row_to_favorite(row) for row in cur.fetchall()]
 
 
 def delete_favorite(favorite_id: int, user_id: int) -> None:
-    fav = _favorites.get(favorite_id)
-    if fav is None:
-        raise FavoriteNotFoundError(favorite_id)
-    if fav.user_id != user_id:
-        raise NotFavoriteOwnerError(favorite_id)
-    del _favorites[favorite_id]
+    with db.get_cursor() as cur:
+        cur.execute(f"SELECT {_FAVORITE_COLUMNS} FROM favorite WHERE favorite_id = %s", (favorite_id,))
+        row = cur.fetchone()
+        if row is None:
+            raise FavoriteNotFoundError(favorite_id)
+        if row["user_id"] != user_id:
+            raise NotFavoriteOwnerError(favorite_id)
+        cur.execute("DELETE FROM favorite WHERE favorite_id = %s", (favorite_id,))
