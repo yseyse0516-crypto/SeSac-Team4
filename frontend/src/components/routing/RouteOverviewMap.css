@@ -1,0 +1,74 @@
+.route-overview-map-wrap {
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.route-overview-map__container {
+  position: relative;
+}
+
+.route-overview-map {
+  width: 100%;
+  height: 280px;
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+
+.route-overview-map__bike-toggle {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 15;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.route-overview-map--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 280px;
+  padding: 10px 12px;
+  background: var(--surface-muted);
+  color: var(--text-sub);
+  font-size: 11px;
+}
+
+.route-overview-map__legend {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: calc(100% - 16px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  box-shadow: var(--shadow-card);
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.route-overview-map__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.route-overview-map__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}

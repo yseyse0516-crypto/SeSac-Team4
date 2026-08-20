@@ -1,0 +1,33 @@
+.view-mode-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.view-mode-toolbar__item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 12px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-sub);
+  cursor: pointer;
+}
+
+.view-mode-toolbar__item--active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
+.view-mode-toolbar__icon {
+  font-size: 24px;
+  line-height: 1;
+}

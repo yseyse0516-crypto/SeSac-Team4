@@ -35,6 +35,12 @@
   --line-7: #747f00;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   background: var(--bg);

@@ -1,0 +1,77 @@
+.signup-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.signup-page__card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 28px 24px;
+  font-family: var(--font-sans);
+}
+
+.signup-page__title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 4px;
+}
+
+.signup-page__subtitle {
+  font-size: 13px;
+  color: var(--text-sub);
+  margin: 0 0 20px;
+}
+
+.signup-page__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-sub);
+  margin-bottom: 14px;
+}
+
+.signup-page__field input {
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+}
+
+.signup-page__field input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.signup-page__error {
+  color: var(--level-packed);
+  font-size: 12px;
+  margin: -4px 0 12px;
+}
+
+.signup-page__submit {
+  width: 100%;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-control);
+  padding: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.signup-page__submit:hover {
+  background: var(--primary-hover);
+}

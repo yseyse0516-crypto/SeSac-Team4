@@ -1,0 +1,28 @@
+/* 지도/따릉이 탭에서 "추천 경로만 보기"를 보여주는 옵션 바. */
+
+.route-options-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  margin-bottom: 8px;
+}
+
+.route-options-bar__chip {
+  flex-shrink: 0;
+  white-space: nowrap;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-sub);
+  cursor: pointer;
+}
+
+.route-options-bar__chip--active {
+  background: var(--secondary);
+  border-color: var(--primary);
+  color: var(--primary);
+}

@@ -1,0 +1,42 @@
+.nearby-bike-docks {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.nearby-bike-docks__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 6px;
+}
+
+.nearby-bike-docks__item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.nearby-bike-docks__item:first-of-type {
+  border-top: none;
+}
+
+.nearby-bike-docks__name {
+  color: var(--text);
+}
+
+.nearby-bike-docks__meta {
+  color: var(--text-sub);
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+.nearby-bike-docks__meta--empty {
+  color: var(--level-packed);
+}

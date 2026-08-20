@@ -1,0 +1,88 @@
+.account-page {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: var(--font-sans);
+}
+
+.account-page__card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.account-page__nickname-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.account-page__nickname {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.account-page__edit-btn {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.account-page__nickname-edit {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.account-page__nickname-edit input {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.account-page__nickname-edit button {
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-control);
+  padding: 8px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.account-page__sub {
+  font-size: 12px;
+  color: var(--text-sub);
+}
+
+.account-page__action-btn {
+  width: 100%;
+  border-radius: var(--radius-control);
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+}
+
+.account-page__logout {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+.account-page__withdraw {
+  background: var(--surface);
+  color: var(--level-packed);
+  border-color: var(--level-packed);
+}

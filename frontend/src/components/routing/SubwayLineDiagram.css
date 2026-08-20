@@ -1,0 +1,26 @@
+.subway-line-diagram {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 8px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.subway-line-diagram__note {
+  font-size: 10px;
+  color: var(--text-sub);
+  margin: 4px 2px 0;
+}
+
+.subway-line-diagram svg {
+  width: 100%;
+  height: 170px;
+  display: block;
+}
+
+.subway-line-diagram__station-label {
+  font-size: 9px;
+  fill: var(--text-sub);
+}

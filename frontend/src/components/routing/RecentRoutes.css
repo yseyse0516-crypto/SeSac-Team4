@@ -1,0 +1,43 @@
+.recent-routes {
+  margin-top: 8px;
+}
+
+.recent-routes__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.recent-routes__title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.recent-routes__clear {
+  background: none;
+  border: none;
+  color: var(--text-sub);
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.recent-routes__item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 6px 10px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-sub);
+}
+
+.recent-routes__item strong {
+  color: var(--text);
+  font-weight: 600;
+}

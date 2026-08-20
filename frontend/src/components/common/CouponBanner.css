@@ -1,0 +1,40 @@
+.coupon-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--primary);
+  color: white;
+  border-radius: var(--radius-card);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.coupon-banner__text {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.coupon-banner__sub {
+  font-size: 11px;
+  opacity: 0.85;
+  font-weight: 400;
+  margin-top: 2px;
+}
+
+.coupon-banner__button {
+  flex-shrink: 0;
+  background: white;
+  color: var(--primary);
+  border: none;
+  border-radius: var(--radius-chip);
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.coupon-banner__button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

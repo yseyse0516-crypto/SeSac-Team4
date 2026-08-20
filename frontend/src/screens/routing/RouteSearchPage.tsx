@@ -1,8 +1,13 @@
 import { useState } from "react";
 import { RouteSearchForm, type RouteSearchValues } from "../../components/routing/RouteSearchForm";
-import { RouteMap } from "../../components/routing/RouteMap";
+import { RouteOverviewMap } from "../../components/routing/RouteOverviewMap";
+import { ViewModeToolbar, type ViewMode } from "../../components/routing/ViewModeToolbar";
+import { NearbyBikeDocks } from "../../components/routing/NearbyBikeDocks";
+import { RouteComparisonTable } from "../../components/routing/RouteComparisonTable";
+import { SubwayLineDiagram } from "../../components/routing/SubwayLineDiagram";
 import { fetchRoutes, RouteSearchError } from "../../api/routes";
-import type { RouteCandidate, TransportMode } from "../../types/routing";
+import type { RouteCandidate } from "../../types/routing";
+import "./RouteOptionsBar.css";
 
 // 좌표 변환(geocoding)이 아직 없어서, 검색 시 임시로 목업 origin/destination 좌표를 그대로 사용한다.
 // 실제 geocoding이 붙으면 originText/destinationText -> LatLng 변환 로직만 이 자리에 추가하면 된다.
@@ -17,10 +22,12 @@ interface SearchError {
   message: string;
 }
 
+// backend/app/routers/search.py 기준: 400 INVALID_INPUT / 404 NO_CANDIDATE /
+// 503 UPSTREAM_QUOTA_EXCEEDED(ODsay 일일 쿼터 초과) / 502 UPSTREAM_ERROR.
 const ERROR_BY_STATUS: Record<number, SearchError> = {
   400: { kind: "invalid_input", message: "출발지를 다시 선택해 주세요." },
   404: { kind: "no_candidate", message: "추천 경로를 찾지 못했습니다." },
-  429: { kind: "quota_exceeded", message: "잠시 후 다시 시도해 주세요." },
+  503: { kind: "quota_exceeded", message: "잠시 후 다시 시도해 주세요." },
   502: { kind: "upstream_error", message: "연동 시스템에 문제가 발생했습니다." },
 };
 
@@ -37,46 +44,21 @@ function toSearchError(err: unknown): SearchError {
 const DEBUG_ERROR_TRIGGER: Record<string, SearchError> = {
   "테스트400": ERROR_BY_STATUS[400],
   "테스트404": ERROR_BY_STATUS[404],
-  "테스트429": ERROR_BY_STATUS[429],
+  "테스트503": ERROR_BY_STATUS[503],
   "테스트502": ERROR_BY_STATUS[502],
-};
-
-// ui-ux-guide.md §3 — congestion_score(0~1, backend.md §7.1 Q1)를 4단계로 정규화해서
-// 화면에는 항상 이 라벨/색만 노출하고, 원본 점수는 보조 정보로만 보여준다.
-function getCongestionLevel(congestionScore: number) {
-  if (congestionScore < 0.4) return { label: "여유", color: "var(--level-calm)" };
-  if (congestionScore < 0.6) return { label: "보통", color: "var(--level-normal)" };
-  if (congestionScore < 0.8) return { label: "혼잡", color: "var(--level-busy)" };
-  return { label: "매우 혼잡", color: "var(--level-packed)" };
-}
-
-// path_type의 정확한 enum이 backend.md에 명시돼 있지 않아, 알려진 값만 사람이 읽는 문구로 매핑하고
-// 나머지는 원본 문자열을 그대로 보여준다 (백엔드 확정되면 이 매핑만 갱신하면 됨).
-const PATH_TYPE_LABEL: Record<string, string> = {
-  recommended: "추천 경로",
-  fastest: "최단시간 경로",
-  bike_transfer: "따릉이 + 지하철",
-  bus_direct: "버스 직행",
-};
-
-const MODE_ICON: Record<TransportMode, string> = {
-  walk: "🚶",
-  subway: "🚇",
-  bus: "🚌",
-  bike: "🚲",
 };
 
 export function RouteSearchPage() {
   const [routes, setRoutes] = useState<RouteCandidate[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null);
   const [error, setError] = useState<SearchError | null>(null);
   const [lastValues, setLastValues] = useState<RouteSearchValues | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("map");
+  const [onlyRecommended, setOnlyRecommended] = useState(false);
 
   async function handleSearch(values: RouteSearchValues) {
     setLoading(true);
     setError(null);
-    setSelectedRouteId(null);
     setLastValues(values);
 
     const debugError = DEBUG_ERROR_TRIGGER[values.destinationText.trim()];
@@ -89,17 +71,16 @@ export function RouteSearchPage() {
     }
 
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      // 기준시간 입력을 없앴으므로 departure_time을 안 보내면, 백엔드가 현재 시각 기준으로 조회한다.
       const response = await fetchRoutes({
-        origin: PLACEHOLDER_ORIGIN,
-        destination: PLACEHOLDER_DESTINATION,
-        departAt: `${today}T${values.departAt}:00+09:00`,
+        origin: values.originCoords ?? PLACEHOLDER_ORIGIN,
+        destination: values.destinationCoords ?? PLACEHOLDER_DESTINATION,
       });
-      if (response.routes.length === 0) {
+      if (response.candidates.length === 0) {
         setRoutes([]);
         setError(ERROR_BY_STATUS[404]);
       } else {
-        setRoutes(response.routes);
+        setRoutes(response.candidates);
       }
     } catch (err) {
       setRoutes([]);
@@ -110,13 +91,40 @@ export function RouteSearchPage() {
   }
 
   return (
-    <div style={{ maxWidth: 720, margin: "0 auto", padding: 20 }}>
-      <RouteSearchForm onSearch={handleSearch} />
+    <div style={{ maxWidth: 720, margin: "0 auto", padding: "12px 20px" }}>
+      <ViewModeToolbar value={viewMode} onChange={setViewMode} />
+      <RouteSearchForm onSearch={handleSearch} searchCategory={viewMode} />
 
-      {loading && <p style={{ color: "var(--text-sub)" }}>경로 탐색 중...</p>}
+      {(viewMode === "map" || viewMode === "bike") && (
+        <div className="route-options-bar">
+          <button
+            type="button"
+            className={
+              onlyRecommended
+                ? "route-options-bar__chip route-options-bar__chip--active"
+                : "route-options-bar__chip"
+            }
+            onClick={() => setOnlyRecommended((v) => !v)}
+          >
+            추천 경로만 보기
+          </button>
+        </div>
+      )}
+
+      {(viewMode === "map" || viewMode === "bike") && (
+        <RouteOverviewMap
+          routes={routes}
+          center={lastValues?.originCoords ?? PLACEHOLDER_ORIGIN}
+          showBikeToggle={viewMode === "bike"}
+          onlyRecommended={onlyRecommended}
+        />
+      )}
+      {viewMode === "subway" && <SubwayLineDiagram />}
+
+      {loading && <p style={{ color: "var(--text-sub)", fontSize: 13 }}>경로 탐색 중...</p>}
 
       {!loading && error?.kind === "invalid_input" && (
-        <p style={{ color: "var(--level-packed)", fontSize: 13, marginTop: 12 }}>{error.message}</p>
+        <p style={{ color: "var(--level-packed)", fontSize: 13, marginTop: 8 }}>{error.message}</p>
       )}
 
       {!loading && error?.kind === "quota_exceeded" && (
@@ -125,8 +133,8 @@ export function RouteSearchPage() {
             background: "var(--surface-muted)",
             color: "var(--text)",
             borderRadius: "var(--radius-control)",
-            padding: 12,
-            marginTop: 12,
+            padding: 10,
+            marginTop: 8,
             fontSize: 13,
           }}
         >
@@ -135,14 +143,14 @@ export function RouteSearchPage() {
       )}
 
       {!loading && error?.kind === "no_candidate" && (
-        <div style={{ textAlign: "center", padding: "32px 0", color: "var(--text-sub)" }}>
+        <div style={{ textAlign: "center", padding: "20px 0", color: "var(--text-sub)" }}>
           <p>{error.message}</p>
         </div>
       )}
 
       {!loading && error?.kind === "upstream_error" && (
-        <div style={{ textAlign: "center", padding: "32px 0" }}>
-          <p style={{ color: "var(--text-sub)", marginBottom: 12 }}>{error.message}</p>
+        <div style={{ textAlign: "center", padding: "20px 0" }}>
+          <p style={{ color: "var(--text-sub)", marginBottom: 10, fontSize: 13 }}>{error.message}</p>
           <button
             type="button"
             onClick={() => lastValues && handleSearch(lastValues)}
@@ -151,7 +159,7 @@ export function RouteSearchPage() {
               color: "white",
               border: "none",
               borderRadius: "var(--radius-control)",
-              padding: "10px 20px",
+              padding: "8px 18px",
               fontWeight: 600,
               cursor: "pointer",
             }}
@@ -162,90 +170,12 @@ export function RouteSearchPage() {
       )}
 
       {!loading && !error && routes.length > 0 && (
-        <ul style={{ listStyle: "none", padding: 0, marginTop: 20 }}>
-          {routes.map((route) => {
-            const level = getCongestionLevel(route.congestion_score);
-            const modes = route.segments.map((segment) => segment.mode);
-            const isSelected = selectedRouteId === route.id;
-            return (
-              <li
-                key={route.id}
-                onClick={() => setSelectedRouteId(isSelected ? null : route.id)}
-                style={{
-                  background: "var(--surface)",
-                  border: route.is_recommended ? "1px solid var(--primary)" : "1px solid var(--border)",
-                  borderLeft: `4px solid ${level.color}`,
-                  borderRadius: "var(--radius-card)",
-                  boxShadow: "var(--shadow-card)",
-                  padding: 16,
-                  marginBottom: 12,
-                  color: "var(--text)",
-                  cursor: "pointer",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <strong style={{ fontSize: 15, fontWeight: 600 }}>{route.total_time_min}분</strong>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: level.color }}>{level.label}</span>
-                </div>
-
-                {route.is_recommended && (
-                  <span
-                    style={{
-                      display: "inline-block",
-                      background: "var(--primary)",
-                      color: "white",
-                      fontSize: 11,
-                      fontWeight: 600,
-                      borderRadius: "var(--radius-chip)",
-                      padding: "2px 8px",
-                      marginTop: 6,
-                    }}
-                  >
-                    가장 여유로운 경로
-                  </span>
-                )}
-
-                <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 8, fontSize: 13 }}>
-                  {modes.map((mode, i) => (
-                    <span key={`${mode}-${i}`}>
-                      {i > 0 && <span style={{ color: "var(--text-sub)", margin: "0 2px" }}>›</span>}
-                      {MODE_ICON[mode]}
-                    </span>
-                  ))}
-                </div>
-
-                <div style={{ fontSize: 12, color: "var(--text-sub)", marginTop: 8 }}>
-                  {PATH_TYPE_LABEL[route.path_type] ?? route.path_type} · 분당개선 {route.minute_improvement_ratio}
-                </div>
-
-                {isSelected && (
-                  <div style={{ marginTop: 12 }} onClick={(e) => e.stopPropagation()}>
-                    <RouteMap segments={route.segments} lineColor={level.color} />
-                    <ol style={{ listStyle: "none", padding: 0, marginTop: 8, fontSize: 12 }}>
-                      {route.segments.map((segment, i) => (
-                        <li
-                          key={i}
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            padding: "6px 0",
-                            borderTop: i > 0 ? "1px solid var(--border)" : "none",
-                            color: "var(--text)",
-                          }}
-                        >
-                          <span>
-                            {MODE_ICON[segment.mode]} {segment.mode}
-                          </span>
-                          <span style={{ color: "var(--text-sub)" }}>{segment.duration_min}분</span>
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+        <>
+          <RouteComparisonTable routes={routes} />
+          {viewMode === "bike" && (
+            <NearbyBikeDocks from={lastValues?.originCoords ?? PLACEHOLDER_ORIGIN} />
+          )}
+        </>
       )}
     </div>
   );

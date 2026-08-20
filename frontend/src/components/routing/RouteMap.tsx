@@ -1,31 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { RouteSegment } from "../../types/routing";
+import { KAKAO_MAP_KEY, loadKakaoMaps } from "../../api/kakaoMapLoader";
 import "./RouteMap.css";
-
-// 카카오맵 JS SDK는 npm 패키지가 아니라 <script> 태그로 로드한다 (타입 정의는 any로 최소화).
-declare global {
-  interface Window {
-    kakao: any;
-  }
-}
-
-const KAKAO_MAP_KEY = import.meta.env.VITE_KAKAO_MAP_KEY;
-
-// 여러 RouteMap 인스턴스가 있어도 SDK 스크립트는 한 번만 로드되도록 모듈 스코프에 캐싱.
-let kakaoLoadPromise: Promise<void> | null = null;
-
-function loadKakaoMaps(appKey: string): Promise<void> {
-  if (!kakaoLoadPromise) {
-    kakaoLoadPromise = new Promise((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?autoload=false&appkey=${appKey}`;
-      script.onload = () => window.kakao.maps.load(() => resolve());
-      script.onerror = () => reject(new Error("카카오맵 SDK 로드 실패"));
-      document.head.appendChild(script);
-    });
-  }
-  return kakaoLoadPromise;
-}
 
 function renderMap(container: HTMLDivElement, segments: RouteSegment[], lineColor: string) {
   const kakao = window.kakao;

@@ -1,0 +1,87 @@
+.route-comparison {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.route-comparison__summary {
+  display: flex;
+  gap: 8px;
+}
+
+.route-comparison__summary-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: var(--radius-control);
+  background: var(--surface-muted);
+}
+
+.route-comparison__summary-card--recommended {
+  background: var(--secondary);
+  border: 1px solid var(--primary);
+}
+
+.route-comparison__summary-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-sub);
+}
+
+.route-comparison__summary-card--recommended .route-comparison__summary-label {
+  color: var(--primary);
+}
+
+.route-comparison__summary-time {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.route-comparison__summary-sub {
+  font-size: 11px;
+  color: var(--text-sub);
+}
+
+.route-comparison__toggle {
+  display: block;
+  margin: 8px auto 0;
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.route-comparison__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-top: 10px;
+}
+
+.route-comparison__table th,
+.route-comparison__table td {
+  text-align: center;
+  padding: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.route-comparison__table th:first-child,
+.route-comparison__table td:first-child {
+  text-align: left;
+  color: var(--text-sub);
+}
+
+.route-comparison__table th {
+  color: var(--text-sub);
+  font-weight: 600;
+  font-size: 11px;
+}
