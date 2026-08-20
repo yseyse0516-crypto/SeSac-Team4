@@ -1,6 +1,12 @@
 fastapi
 uvicorn[standard]
+pydantic
 psycopg[binary,pool]
 redis
 python-dotenv
 httpx
+shapely
+bcrypt
+PyJWT
+pytest
+fakeredis
