@@ -7,11 +7,6 @@ import { fetchRoutes, RouteSearchError } from "../../api/routes";
 import type { RouteCandidate } from "../../types/routing";
 import "./RouteOptionsBar.css";
 
-// 좌표 변환(geocoding)이 아직 없어서, 검색 시 임시로 목업 origin/destination 좌표를 그대로 사용한다.
-// 실제 geocoding이 붙으면 originText/destinationText -> LatLng 변환 로직만 이 자리에 추가하면 된다.
-const PLACEHOLDER_ORIGIN = { lat: 37.4671, lng: 126.897 };
-const PLACEHOLDER_DESTINATION = { lat: 37.4459, lng: 126.8917 };
-
 // frontend-plan.md §3.3에 정의된 에러코드별 UI 처리.
 type SearchErrorKind = "invalid_input" | "no_candidate" | "quota_exceeded" | "upstream_error";
 
@@ -68,11 +63,20 @@ export function RouteSearchPage() {
       return;
     }
 
+    // 지오코딩 실패 등으로 좌표를 못 구한 경우 — 절대 임의 좌표로 조용히 검색하지 않고
+    // 명시적으로 에러를 보여준다(예전엔 여기서 목업 좌표로 폴백해 엉뚱한 위치가 검색되는 버그가 있었다).
+    if (!values.originCoords || !values.destinationCoords) {
+      setRoutes([]);
+      setError(ERROR_BY_STATUS[400]);
+      setLoading(false);
+      return;
+    }
+
     try {
       // 기준시간 입력을 없앴으므로 departure_time을 안 보내면, 백엔드가 현재 시각 기준으로 조회한다.
       const response = await fetchRoutes({
-        origin: values.originCoords ?? PLACEHOLDER_ORIGIN,
-        destination: values.destinationCoords ?? PLACEHOLDER_DESTINATION,
+        origin: values.originCoords,
+        destination: values.destinationCoords,
       });
       if (response.candidates.length === 0) {
         setRoutes([]);
@@ -161,12 +165,10 @@ export function RouteSearchPage() {
         </div>
       )}
 
-      {!loading && !error && routes.length > 0 && (
+      {!loading && !error && routes.length > 0 && lastValues?.originCoords && (
         <>
           <RouteComparisonTable routes={routes} />
-          {viewMode === "bike" && (
-            <NearbyBikeDocks from={lastValues?.originCoords ?? PLACEHOLDER_ORIGIN} />
-          )}
+          {viewMode === "bike" && <NearbyBikeDocks from={lastValues.originCoords} />}
         </>
       )}
     </div>

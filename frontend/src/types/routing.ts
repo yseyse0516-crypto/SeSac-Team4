@@ -29,6 +29,9 @@ export interface RouteSegment {
   stop_sequence?: number | null;
   matched: boolean; // 매칭 실패 시 false (station_id/stop_id는 null)
   polyline?: { lat: number; lng: number }[] | null; // null이면 start-end를 직선으로 표시
+  start_name?: string | null; // 탑승역/정류장 이름(도보 구간은 null) — 경로 상세 안내용
+  end_name?: string | null; // 하차역/정류장 이름(도보 구간은 null)
+  line_name?: string | null; // 지하철 노선 이름(예: "서울교통공사 2호선"), 버스는 null(route_id가 버스 번호)
 }
 
 export interface RouteCandidate {

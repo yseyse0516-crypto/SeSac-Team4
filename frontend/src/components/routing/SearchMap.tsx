@@ -32,10 +32,27 @@ type ActivePicker = "origin" | "destination" | null;
 interface SearchMapProps {
   center: LatLng;
   activePicker: ActivePicker;
-  onPick: (point: LatLng) => void;
+  onPick: (point: LatLng, label?: string) => void;
   routes: RouteCandidate[];
   onlyRecommended: boolean;
   showBikeToggle?: boolean;
+}
+
+// 좌표를 실제 주소 문자열로 바꾼다(역지오코딩) — 도로명 주소가 있으면 그걸 우선하고,
+// 없으면 지번 주소로 폴백한다. 실패하면 null(호출부가 좌표 문자열로 폴백).
+function reverseGeocode(point: LatLng): Promise<string | null> {
+  return new Promise((resolve) => {
+    const kakao = window.kakao;
+    const geocoder = new kakao.maps.services.Geocoder();
+    geocoder.coord2Address(point.lng, point.lat, (result: any[], status: string) => {
+      if (status !== kakao.maps.services.Status.OK || !result[0]) {
+        resolve(null);
+        return;
+      }
+      const address = result[0].road_address?.address_name ?? result[0].address?.address_name ?? null;
+      resolve(address);
+    });
+  });
 }
 
 export function SearchMap({
@@ -127,7 +144,11 @@ export function SearchMap({
       const latlng = mouseEvent.latLng;
       if (pickMarkerRef.current) pickMarkerRef.current.setMap(null);
       pickMarkerRef.current = new kakao.maps.Marker({ map, position: latlng });
-      onPick({ lat: latlng.getLat(), lng: latlng.getLng() });
+      const point = { lat: latlng.getLat(), lng: latlng.getLng() };
+      onPick(point);
+      reverseGeocode(point).then((address) => {
+        if (address) onPick(point, address);
+      });
     }
 
     kakao.maps.event.addListener(map, "click", handleClick);

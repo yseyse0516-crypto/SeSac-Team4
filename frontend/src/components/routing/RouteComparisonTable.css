@@ -16,15 +16,27 @@
   flex: 1;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 2px;
   padding: 8px 10px;
   border-radius: var(--radius-control);
   background: var(--surface-muted);
+  border: 1px solid transparent;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
 }
 
 .route-comparison__summary-card--recommended {
   background: var(--secondary);
   border: 1px solid var(--primary);
+}
+
+.route-comparison__directions-label {
+  margin: 10px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-sub);
 }
 
 .route-comparison__summary-label {

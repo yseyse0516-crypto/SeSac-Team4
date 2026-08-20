@@ -3,8 +3,32 @@ import { FAVORITE_STOPS, type FavoriteStop } from "../../constants/favoriteStops
 import { SearchMap } from "./SearchMap";
 import { SubwayLineDiagram } from "./SubwayLineDiagram";
 import { addRecentSearch, getRecentSearches, type SearchCategory } from "../../utils/recentSearches";
+import { KAKAO_MAP_KEY, loadKakaoMaps } from "../../api/kakaoMapLoader";
 import type { LatLng, RouteCandidate } from "../../types/routing";
 import "./RouteSearchForm.css";
+
+// 출발지/도착지 입력창에 지명을 타이핑하거나 즐겨찾기를 클릭했을 때(지도 클릭 없이)
+// 실제 좌표로 바꿔주는 지오코딩 — 카카오 키워드 장소검색(Places)을 쓴다. 실패하면 null
+// (호출부가 "출발지를 다시 선택해 주세요" 에러로 처리하고, 절대 임의 좌표로 조용히 대체하지 않는다).
+async function searchPlace(keyword: string): Promise<LatLng | null> {
+  if (!KAKAO_MAP_KEY) return null;
+  try {
+    await loadKakaoMaps(KAKAO_MAP_KEY);
+  } catch {
+    return null;
+  }
+  return new Promise((resolve) => {
+    const kakao = window.kakao;
+    const places = new kakao.maps.services.Places();
+    places.keywordSearch(keyword, (result: any[], status: string) => {
+      if (status !== kakao.maps.services.Status.OK || !result[0]) {
+        resolve(null);
+        return;
+      }
+      resolve({ lat: Number(result[0].y), lng: Number(result[0].x) });
+    });
+  });
+}
 
 // 출발지/도착지 + 즐겨찾기 + 탐색버튼. 기준시간 입력은 뺐다 — 실행하는 시점의 현재 시간
 // 기준으로 바로 조회하면 되는 기능이라 별도 입력이 불필요하다는 판단 (RouteSearchPage에서 처리).
@@ -44,6 +68,7 @@ export function RouteSearchForm({
   const [destinationCoords, setDestinationCoords] = useState<LatLng | null>(null);
   const [activePicker, setActivePicker] = useState<ActivePicker>(null);
   const [locating, setLocating] = useState(false);
+  const [resolving, setResolving] = useState(false);
 
   // 네이버지도/카카오지하철처럼 출발지·도착지 입력창에 포커스하면 최근 검색어를 드롭다운으로 보여준다.
   // 보기모드(지도/지하철/따릉이)가 바뀌면 검색 대상이 달라서 목록도 같이 바뀐다.
@@ -97,8 +122,10 @@ export function RouteSearchForm({
     setDestinationCoords(null);
   }
 
-  function handlePick(point: LatLng) {
-    const label = `📍 지도에서 선택 (${point.lat.toFixed(4)}, ${point.lng.toFixed(4)})`;
+  function handlePick(point: LatLng, address?: string) {
+    // 역지오코딩(좌표->주소)이 비동기라, 클릭 즉시는 좌표로 먼저 채워두고 주소를 받으면
+    // 같은 필드를 실제 주소로 덮어쓴다.
+    const label = address ?? `📍 지도에서 선택 (${point.lat.toFixed(4)}, ${point.lng.toFixed(4)})`;
     if (activePicker === "origin") {
       setOriginCoords(point);
       setOriginText(label);
@@ -120,15 +147,32 @@ export function RouteSearchForm({
     setActivePicker(null);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    // 지도 클릭이나 즐겨찾기로 이미 좌표가 채워져 있으면 그대로 쓰고, 텍스트만 있고 좌표가
+    // 없는 경우(직접 타이핑, 즐겨찾기 클릭 등)에만 지오코딩한다.
+    let resolvedOrigin = originCoords;
+    let resolvedDestination = destinationCoords;
+
+    setResolving(true);
+    if (!resolvedOrigin && originText.trim()) {
+      resolvedOrigin = await searchPlace(originText.trim());
+      if (resolvedOrigin) setOriginCoords(resolvedOrigin);
+    }
+    if (!resolvedDestination && destinationText.trim()) {
+      resolvedDestination = await searchPlace(destinationText.trim());
+      if (resolvedDestination) setDestinationCoords(resolvedDestination);
+    }
+    setResolving(false);
+
     addRecentSearch(searchCategory, originText);
     setRecentSearches(addRecentSearch(searchCategory, destinationText));
     onSearch({
       originText,
       destinationText,
-      originCoords: originCoords ?? undefined,
-      destinationCoords: destinationCoords ?? undefined,
+      originCoords: resolvedOrigin ?? undefined,
+      destinationCoords: resolvedDestination ?? undefined,
     });
   }
 
@@ -304,8 +348,8 @@ export function RouteSearchForm({
         </button>
       </div>
 
-      <button type="submit" className="route-search-form__submit">
-        탐색
+      <button type="submit" className="route-search-form__submit" disabled={resolving}>
+        {resolving ? "위치 확인 중..." : "탐색"}
       </button>
     </form>
   );
