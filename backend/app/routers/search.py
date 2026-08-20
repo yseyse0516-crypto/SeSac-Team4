@@ -13,7 +13,12 @@ from fastapi import APIRouter, HTTPException
 from app.schemas.route import Candidate, Coordinate, SearchRequest, SearchResponse, Segment
 from app.services import candidate_log_stub as candidate_log
 from app.services import filtering, line_geometry, matching, scoring, walk_geometry
-from app.services.odsay_client import OdsayError, OdsayNoCandidateError, call_odsay
+from app.services.odsay_client import (
+    OdsayError,
+    OdsayNoCandidateError,
+    OdsayQuotaExceededError,
+    call_odsay,
+)
 from app.services.odsay_parser import ParsedSegment, fill_walk_coordinates, parse_odsay_result
 
 router = APIRouter(prefix="/api/v1/routes", tags=["routes"])
@@ -34,6 +39,8 @@ def search_routes(payload: SearchRequest) -> SearchResponse:
         )
     except OdsayNoCandidateError as exc:
         raise HTTPException(status_code=404, detail={"code": "NO_CANDIDATE"}) from exc
+    except OdsayQuotaExceededError as exc:
+        raise HTTPException(status_code=503, detail={"code": "UPSTREAM_QUOTA_EXCEEDED"}) from exc
     except OdsayError as exc:
         raise HTTPException(status_code=502, detail={"code": "UPSTREAM_ERROR"}) from exc
 
