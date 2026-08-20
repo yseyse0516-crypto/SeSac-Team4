@@ -10,9 +10,14 @@ CREATE TABLE station (
     station_id   SERIAL PRIMARY KEY,
     station_name VARCHAR(100) NOT NULL,
     line_name    VARCHAR(50),
+    -- 역번호(재우님 추가, 2026-08-20): 반경형 노선(1,3~8호선)은 역번호 증감으로 상행/하행을
+    -- 판정할 수 있어 방향 계산에 필요하다. 2호선(순환선)은 이 규칙이 안 통해 통계적 추정 대상.
+    -- NULL 허용: 배치 미반영 행, 방향 판정에 역번호가 필요 없는 노선.
+    station_no   VARCHAR(10),
     lat          NUMERIC(9,6) NOT NULL,
     lng          NUMERIC(9,6) NOT NULL,
-    created_at   TIMESTAMP NOT NULL DEFAULT now()
+    created_at   TIMESTAMP NOT NULL DEFAULT now(),
+    UNIQUE (line_name, station_no)
 );
 
 CREATE TABLE bus_stop (
@@ -53,12 +58,16 @@ CREATE TABLE station_weight (
     station_weight_id SERIAL PRIMARY KEY,
     station_id        INT NOT NULL REFERENCES station(station_id),
     batch_id          INT NOT NULL REFERENCES batch_run(batch_id),
+    -- 방향(재우님 추가, 2026-08-20): 같은 역도 상선/하선(2호선은 내선/외선)마다 혼잡도가
+    -- 크게 달라서 UNIQUE에도 포함한다. 판정 규칙: 반경형 노선은 station.station_no 증감,
+    -- 2호선은 통계적 추정.
+    direction         VARCHAR(10) CHECK (direction IN ('상선', '하선', '내선', '외선')),
     time_slot         VARCHAR(20) NOT NULL, -- 예: '08:00-08:30'
     dow               SMALLINT NOT NULL,    -- 0=월 .. 6=일
     net_onboard       NUMERIC(10,2),        -- 재차인원
     congestion_pct    NUMERIC(6,2),         -- %혼잡도 (Q1 subway_score = min(congestion_pct/150, 1.0))
     stop_sequence     SMALLINT,             -- 정차순번 (완만한 가우시안 감쇠 계수, 실제 적용은 services/scoring.py)
-    UNIQUE (station_id, batch_id, time_slot, dow)
+    UNIQUE (station_id, batch_id, time_slot, dow, direction)
 );
 
 CREATE TABLE bus_weight (
