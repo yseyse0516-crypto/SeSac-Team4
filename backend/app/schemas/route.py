@@ -36,8 +36,9 @@ class Segment(BaseModel):
     stop_sequence: Optional[int] = None
     matched: bool = True
 
-    # 지하철·버스 구간의 실제 선로/도로 곡선 (backend.md §6.1~§6.3). None이면 매칭
-    # 실패 또는 도보 구간이라는 뜻 — 프론트는 이 경우 start/end를 직선으로 이어서 그리면 됨.
+    # 지하철·버스·도보 구간의 실제 경로 곡선 (backend.md §6.1~§6.3, §13 — 도보는 Tmap
+    # 키 발급 후 반영). None이면 매칭 실패/키 미설정/조회 실패 — 프론트는 이 경우
+    # start/end를 직선으로 이어서 그리면 됨.
     polyline: Optional[list[Coordinate]] = None
 
 
