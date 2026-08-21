@@ -98,6 +98,47 @@ def test_docks_rejects_invalid_hub_type():
     assert resp.status_code == 422
 
 
+@pytest.fixture
+def nearby_dock_fixture():
+    # 서울시청 좌표(37.5665, 126.9780) 기준 가까운/먼 대여소 하나씩.
+    with db.get_cursor() as cur:
+        cur.execute(
+            "INSERT INTO rental_dock (dock_std_id, dock_name, lat, lng) VALUES (%s, %s, %s, %s)",
+            ("_TEST-NEAR", "_테스트대여소(근처)", 37.5670, 126.9785),
+        )
+        cur.execute("SELECT lastval() AS id")
+        near_id = cur.fetchone()["id"]
+
+        cur.execute(
+            "INSERT INTO rental_dock (dock_std_id, dock_name, lat, lng) VALUES (%s, %s, %s, %s)",
+            ("_TEST-FAR", "_테스트대여소(멀리)", 37.65, 127.05),
+        )
+        cur.execute("SELECT lastval() AS id")
+        far_id = cur.fetchone()["id"]
+
+    yield {"near_id": near_id, "far_id": far_id}
+
+    with db.get_cursor() as cur:
+        cur.execute("DELETE FROM rental_dock WHERE dock_id IN (%s, %s)", (near_id, far_id))
+
+
+def test_docks_nearby_returns_only_within_radius(nearby_dock_fixture):
+    resp = client.get("/bike/docks/nearby?lat=37.5665&lng=126.9780&radius_m=500")
+    assert resp.status_code == 200
+    docks = resp.json()["docks"]
+    ids = [d["dock_id"] for d in docks]
+    assert nearby_dock_fixture["near_id"] in ids
+    assert nearby_dock_fixture["far_id"] not in ids
+
+
+def test_docks_nearby_sorted_by_distance(nearby_dock_fixture):
+    resp = client.get("/bike/docks/nearby?lat=37.5665&lng=126.9780&radius_m=5000")
+    assert resp.status_code == 200
+    docks = resp.json()["docks"]
+    distances = [d["distance_m"] for d in docks]
+    assert distances == sorted(distances)
+
+
 def test_bike_route_returns_502_without_api_key(monkeypatch):
     monkeypatch.delenv("ORS_API_KEY", raising=False)
     resp = client.get(

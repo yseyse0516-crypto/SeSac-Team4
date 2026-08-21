@@ -165,6 +165,22 @@ GET /api/v1/bike/docks?hub_type=station&hub_id=1021&max_distance=500
 `/routes/search` 응답에 이미 `station_id`/`stop_id`가 들어가므로 A쪽 추가 작업은 없다. 실시간 재고(F-05)는
 API 미확정이라 응답에 `stock: null`로 두고 스텁 처리한다.
 
+### 6.0 좌표 기반 근처 조회 추가 (2026-08-21, 백엔드 B)
+
+위 `hub_type`/`hub_id` 계약은 "경로 검색 결과의 역/정류장 기준"으로만 설계됐었다(이 문서 §6, 2026-08-19
+시점). 이후 프론트 자전거 탭이 "내 위치 근처"처럼 임의 좌표 기준으로 동작하도록 만들어지면서, 계약에
+없는 `GET /bike/docks/nearby?lat&lng&radius_m` 형태를 호출하는 상태였다. 이번에 그 좌표 기반 조회 자체를
+추가해 계약을 맞췄다:
+
+```
+GET /api/v1/bike/docks/nearby?lat=37.5665&lng=126.9780&radius_m=800 (기본 800, 최대 5000)
+→ rental_dock 전체를 haversine으로 스캔(weight_repository.match_subway_station과 동일 패턴,
+   PostGIS 미사용) → 반경 내 대여소를 거리순으로 반환
+```
+
+기존 `/bike/docks`(hub_type/hub_id)는 그대로 유지 — 경로 검색 결과 기준 조회는 계속 그걸 쓴다. 구현:
+`backend/app/routers/bike.py`, 테스트: `backend/tests/test_bike.py`(`nearby_dock_fixture` 관련 2건 추가).
+
 ### 6.1 지도 위 지하철 노선 시각화 — 실제 선로 곡선 데이터 (2026-08-19 추가)
 
 프론트에서 "노선도에 경로 그리기"를 요청했을 때, 개략도(45도 직선으로 재배치한 그 노란/파란 지하철 안내도
