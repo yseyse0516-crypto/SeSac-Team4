@@ -40,3 +40,9 @@
 .nearby-bike-docks__meta--empty {
   color: var(--level-packed);
 }
+
+.nearby-bike-docks__empty {
+  color: var(--text-sub);
+  font-size: 12px;
+  margin: 0;
+}

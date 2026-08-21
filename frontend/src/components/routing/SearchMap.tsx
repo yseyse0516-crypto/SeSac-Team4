@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { LatLng, RouteCandidate } from "../../types/routing";
 import { getCongestionLevel } from "../../constants/congestionLevels";
-import { BIKE_DOCKS } from "../../constants/bikeDocks";
+import { rankRouteColors } from "../../constants/routeRanking";
+import { fetchNearbyDocks, type NearbyDock } from "../../api/bike";
 import { KAKAO_MAP_KEY, loadKakaoMaps } from "../../api/kakaoMapLoader";
 import "./SearchMap.css";
 
@@ -67,59 +68,59 @@ export function SearchMap({
   const mapRef = useRef<any>(null);
   const pickMarkerRef = useRef<any>(null);
   const dockMarkersRef = useRef<any[]>([]);
+  const polylinesRef = useRef<any[]>([]);
+  // 클릭 리스너는 지도 생성 시 딱 한 번만 붙이고, activePicker/onPick의 "최신 값"은 ref로
+  // 읽는다 — 그래야 이 값들이 바뀔 때마다 리스너를 떼었다 다시 붙일 필요가 없다.
+  const activePickerRef = useRef(activePicker);
+  const onPickRef = useRef(onPick);
   const [showDocks, setShowDocks] = useState(false);
   const [pin, setPin] = useState<{ x: number; y: number } | null>(null);
   const [status, setStatus] = useState<"no-key" | "loading" | "ready" | "error">(
     KAKAO_MAP_KEY ? "loading" : "no-key"
   );
 
+  useEffect(() => {
+    activePickerRef.current = activePicker;
+  }, [activePicker]);
+  useEffect(() => {
+    onPickRef.current = onPick;
+  }, [onPick]);
+
   const displayedRoutes = capRoutesPerLevel(onlyRecommended ? routes.filter((r) => r.is_recommended) : routes);
 
-  // 지도 생성 + 경로 폴리라인 그리기.
+  // 지도는 딱 한 번만 만든다 — 예전엔 center가 바뀔 때마다(출발지/도착지 선택 모드 전환 등)
+  // 지도 객체를 통째로 새로 만들었는데, 클릭 리스너는 별도 useEffect가 status를 기준으로
+  // 다시 붙이는 구조였다. 근데 재생성 직후 setStatus("ready")를 "ready"로 다시 불러도
+  // React는 값이 안 바뀌었다고 보고 그 useEffect를 재실행하지 않아서, 새로 만들어진 지도엔
+  // 클릭 리스너가 하나도 안 붙은 채로 남아 탭이 전혀 먹지 않는 버그가 있었다. 이제 지도는
+  // 한 번만 만들고, 이후엔 이동/폴리라인 갱신만 한다.
   useEffect(() => {
-    if (!KAKAO_MAP_KEY || !containerRef.current) return;
+    if (!KAKAO_MAP_KEY || !containerRef.current || mapRef.current) return;
 
     let cancelled = false;
-    setStatus((s) => (s === "ready" ? s : "loading"));
     loadKakaoMaps(KAKAO_MAP_KEY)
       .then(() => {
         if (cancelled || !containerRef.current) return;
         const kakao = window.kakao;
-        const firstPoint = displayedRoutes[0]?.segments[0]?.start ?? center;
         const map = new kakao.maps.Map(containerRef.current, {
-          center: new kakao.maps.LatLng(firstPoint.lat, firstPoint.lng),
-          level: displayedRoutes.length > 0 ? 7 : 5,
+          center: new kakao.maps.LatLng(center.lat, center.lng),
+          level: 5,
         });
         mapRef.current = map;
 
-        if (displayedRoutes.length > 0) {
-          const bounds = new kakao.maps.LatLngBounds();
-          // 추천 경로를 나중에(위에) 그려서 다른 경로 선에 덮이지 않게 한다.
-          const ordered = [...displayedRoutes].sort(
-            (a, b) => Number(a.is_recommended) - Number(b.is_recommended)
-          );
-          ordered.forEach((route) => {
-            const level = getCongestionLevel(route.congestion_score);
-            // polyline이 있으면(지하철/버스/도보 구간의 실제 선로·도로 곡선) 그대로 쓰고,
-            // 없으면(매칭 실패/키 미설정) start-end 직선으로 폴백한다.
-            const path = route.segments
-              .flatMap((segment) =>
-                segment.polyline && segment.polyline.length > 0 ? segment.polyline : [segment.start, segment.end]
-              )
-              .map((point) => new kakao.maps.LatLng(point.lat, point.lng));
-            path.forEach((point: any) => bounds.extend(point));
-
-            new kakao.maps.Polyline({
-              map,
-              path,
-              strokeWeight: route.is_recommended ? 6 : 3,
-              strokeColor: level.color,
-              strokeOpacity: route.is_recommended ? 1 : 0.5,
-              strokeStyle: "solid",
-            });
+        function handleClick(mouseEvent: any) {
+          const picker = activePickerRef.current;
+          if (!picker) return;
+          const latlng = mouseEvent.latLng;
+          if (pickMarkerRef.current) pickMarkerRef.current.setMap(null);
+          pickMarkerRef.current = new kakao.maps.Marker({ map, position: latlng });
+          const point = { lat: latlng.getLat(), lng: latlng.getLng() };
+          onPickRef.current(point);
+          reverseGeocode(point).then((address) => {
+            if (address) onPickRef.current(point, address);
           });
-          map.setBounds(bounds);
         }
+        kakao.maps.event.addListener(map, "click", handleClick);
 
         setStatus("ready");
       })
@@ -131,31 +132,58 @@ export function SearchMap({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onlyRecommended, routes.length, center.lat, center.lng]);
+  }, []);
 
-  // 출발지/도착지 찍기 — activePicker가 켜져 있을 때만 지도 클릭이 좌표를 넘긴다.
+  // center가 바뀌면(출발지/도착지 확정, 검색 결과 등) 기존 지도를 그 위치로 이동만 시킨다.
   useEffect(() => {
+    if (status !== "ready" || !mapRef.current) return;
+    mapRef.current.setCenter(new window.kakao.maps.LatLng(center.lat, center.lng));
+  }, [status, center.lat, center.lng]);
+
+  // 경로 폴리라인 — routes/onlyRecommended가 바뀔 때마다 기존 선을 지우고 새로 그린다.
+  useEffect(() => {
+    if (status !== "ready" || !mapRef.current) return;
     const kakao = window.kakao;
-    if (status !== "ready" || !mapRef.current || !kakao) return;
-
     const map = mapRef.current;
-    function handleClick(mouseEvent: any) {
-      if (!activePicker) return;
-      const latlng = mouseEvent.latLng;
-      if (pickMarkerRef.current) pickMarkerRef.current.setMap(null);
-      pickMarkerRef.current = new kakao.maps.Marker({ map, position: latlng });
-      const point = { lat: latlng.getLat(), lng: latlng.getLng() };
-      onPick(point);
-      reverseGeocode(point).then((address) => {
-        if (address) onPick(point, address);
+
+    polylinesRef.current.forEach((line) => line.setMap(null));
+    polylinesRef.current = [];
+
+    if (displayedRoutes.length === 0) return;
+
+    const bounds = new kakao.maps.LatLngBounds();
+    // 색은 실제 혼잡도 절대값이 아니라 지금 보여주는 후보들 사이의 순위로 정한다 — 추천
+    // 경로가 항상 초록, 나머지는 혼잡도가 낮은 순으로 노랑→빨강.
+    const rankColors = rankRouteColors(displayedRoutes);
+    // 추천 경로를 나중에(위에) 그려서 다른 경로 선에 덮이지 않게 한다.
+    const ordered = [...displayedRoutes].sort((a, b) => Number(a.is_recommended) - Number(b.is_recommended));
+    ordered.forEach((route) => {
+      const color = rankColors.get(route.id) ?? getCongestionLevel(route.congestion_score).color;
+      // polyline이 있으면(지하철/버스/도보 구간의 실제 선로·도로 곡선) 그대로 쓰고,
+      // 없으면(매칭 실패/키 미설정) start-end 직선으로 폴백한다.
+      const path = route.segments
+        .flatMap((segment) =>
+          segment.polyline && segment.polyline.length > 0 ? segment.polyline : [segment.start, segment.end]
+        )
+        .map((point) => new kakao.maps.LatLng(point.lat, point.lng));
+      path.forEach((point: any) => bounds.extend(point));
+
+      const polyline = new kakao.maps.Polyline({
+        map,
+        path,
+        strokeWeight: route.is_recommended ? 6 : 3,
+        strokeColor: color,
+        strokeOpacity: route.is_recommended ? 1 : 0.5,
+        strokeStyle: "solid",
       });
-    }
+      polylinesRef.current.push(polyline);
+    });
+    map.setBounds(bounds);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, onlyRecommended, routes.length]);
 
-    kakao.maps.event.addListener(map, "click", handleClick);
-    return () => kakao.maps.event.removeListener(map, "click", handleClick);
-  }, [status, activePicker, onPick]);
-
-  // 따릉이 대여소 마커는 지도를 다시 그리지 않고 토글만으로 추가/제거한다.
+  // 따릉이 대여소 마커 — 토글을 켤 때마다 현재 지도 중심 근처 실제 대여소를 실시간 API로
+  // 받아와서 찍는다(지도를 다시 그리진 않고 마커만 추가/제거).
   useEffect(() => {
     const kakao = window.kakao;
     if (!mapRef.current || !kakao || status !== "ready") return;
@@ -163,27 +191,38 @@ export function SearchMap({
     dockMarkersRef.current.forEach((marker) => marker.setMap(null));
     dockMarkersRef.current = [];
 
-    if (showDocks) {
-      dockMarkersRef.current = BIKE_DOCKS.map(
+    if (!showDocks) return;
+
+    let cancelled = false;
+    const mapCenter = mapRef.current.getCenter();
+    fetchNearbyDocks({ lat: mapCenter.getLat(), lng: mapCenter.getLng() }).then((docks: NearbyDock[]) => {
+      if (cancelled || !mapRef.current) return;
+      dockMarkersRef.current = docks.map(
         (dock) =>
           new kakao.maps.Marker({
             map: mapRef.current,
             position: new kakao.maps.LatLng(dock.lat, dock.lng),
-            title: `${dock.name} (${dock.availableCount}대)`,
+            title: `${dock.name} (${dock.stock == null ? "재고 정보 없음" : `${dock.stock}대`})`,
           })
       );
-    }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [showDocks, status]);
 
   function renderLegend() {
     if (status === "error" || displayedRoutes.length === 0) return null;
+    const rankColors = rankRouteColors(displayedRoutes);
     return (
       <div className="search-map__legend">
         {displayedRoutes.map((route) => {
           const level = getCongestionLevel(route.congestion_score);
+          const color = rankColors.get(route.id) ?? level.color;
           return (
             <span key={route.id} className="search-map__legend-item">
-              <span className="search-map__dot" style={{ background: level.color }} />
+              <span className="search-map__dot" style={{ background: color }} />
               {route.total_time_min}분 · {level.label}
               {route.is_recommended && " · 추천"}
             </span>

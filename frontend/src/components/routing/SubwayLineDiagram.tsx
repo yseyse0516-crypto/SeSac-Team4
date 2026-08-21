@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { LatLng, RouteCandidate } from "../../types/routing";
 import { getCongestionLevel } from "../../constants/congestionLevels";
+import { rankRouteColors } from "../../constants/routeRanking";
 import { SUBWAY_STATIONS, type SubwayStation } from "../../constants/subwayStations";
 import { distanceMeters } from "../../utils/distance";
 import "./SubwayLineDiagram.css";
@@ -212,6 +213,9 @@ export function SubwayLineDiagram({ onPickStation, routes, onlyRecommended }: Su
   const legendRoutes = Array.from(
     new Map(stationMatches.filter((m) => m.route).map((m) => [m.route!.id, m.route!])).values()
   );
+  // 색은 실제 혼잡도 절대값이 아니라 지금 보여주는 후보들 사이의 순위로 정한다 — 추천
+  // 경로가 항상 초록, 나머지는 혼잡도가 낮은 순으로 노랑→빨강(모든 탭 공통).
+  const rankColors = rankRouteColors(legendRoutes);
 
   return (
     <div className="subway-line-diagram" ref={wrapperRef}>
@@ -252,18 +256,18 @@ export function SubwayLineDiagram({ onPickStation, routes, onlyRecommended }: Su
             점이 없어도 클릭은 그대로 된다. 실제로 뭔가 보여줄 필요가 있는 역만(검색 결과가
             지나가는 역의 혼잡도 링, 방금 탭한 역 표시) 그린다. */}
         {stationMatches.map(({ station, route }) => {
-          const level = route ? getCongestionLevel(route.congestion_score) : null;
+          const color = route ? rankColors.get(route.id) : null;
           const isPending = pending?.name === station.name;
-          if (!level && !isPending) return null;
+          if (!color && !isPending) return null;
           return (
             <g key={station.name}>
-              {level && (
+              {color && (
                 <circle
                   cx={station.x}
                   cy={station.y}
                   r={STATION_DOT_R * (route?.is_recommended ? 1.8 : 1.4)}
                   fill="none"
-                  stroke={level.color}
+                  stroke={color}
                   strokeWidth={STATION_DOT_R * 0.4}
                   opacity={route?.is_recommended ? 1 : 0.7}
                 />
@@ -282,9 +286,10 @@ export function SubwayLineDiagram({ onPickStation, routes, onlyRecommended }: Su
         <div className="subway-line-diagram__legend">
           {legendRoutes.map((route) => {
             const level = getCongestionLevel(route.congestion_score);
+            const color = rankColors.get(route.id) ?? level.color;
             return (
               <span key={route.id} className="subway-line-diagram__legend-item">
-                <span className="subway-line-diagram__dot" style={{ background: level.color }} />
+                <span className="subway-line-diagram__dot" style={{ background: color }} />
                 {route.total_time_min}분 · {level.label}
                 {route.is_recommended && " · 추천"}
               </span>
