@@ -313,6 +313,55 @@ B안과 동일 — 다만 계단식보다 함수 형태 자체가 더 낫다는 
   이미 `sttn_seq`를 주므로 컬럼 추가가 어렵지 않을 것 — 시간 되면 추가 요청. **추가로 `서울시 노선 정류장마스터
   정보.csv`(노선_ID, 정류장_ID, 링크_구간거리, 정류장_순서)에 노선+정류장 조합별 순번이 이미 있는 걸 확인함
   (§7.3 참고)** — `sttn_seq`(국토교통부)와 교차검증하거나 이 마스터 파일을 그대로 써도 됨.
+- **(2026-08-20 반영)** `bus_weight.stop_sequence`는 배치가 실제로 채워서 붙었다(`feature/batch-etl`).
+  또한 `station_weight`/`bus_weight` 조회가 `weight_repository.py`를 통해 실제 DB로 연결됐고(`feature/
+  weight-db-lookup`), `station_weight`의 UNIQUE 키에 `direction`이 추가됐다 — 아래 §7.2.1은 이 두 변경
+  이후 상태를 기준으로 작성했다.
+
+### 7.2.1 Q3 재개정 — 순증감(하차−승차) 기반 보정으로 전환 (2026-08-21)
+
+`TangTang_혼잡도_스코어링_로직_기술보고서_수정.md`(외부 검토 보고서)가 위 7.2의 구조적 결함을 지적했다:
+`stop_sequence` 감산은 "출고역에서 멀수록 혼잡하다"는 가정 하나에만 기대는 대리 지표라, **환승역처럼
+초반 정차순번에서 대량 하차가 몰리는 지점**에서는 실제로는 덜 혼잡해지는데도(순감소) 낮은 stop_sequence
+때문에 오히려 큰 보너스를 주거나, 반대로 초반에 대량 승차가 몰리는 구간(실제로는 더 혼잡해짐)에도 보너스
+방향이 못 갈린다 — `stop_sequence_discount()`는 항상 1.0 이하만 내놓는 단방향 함수이기 때문이다.
+
+**대체 로직**: 배치가 채워주는 승차/하차 추정치(`boarding_est`/`alighting_est`)가 둘 다 있으면, 정차순번
+대신 이 값으로 직접 보정한다.
+
+```python
+NET_CHANGE_CLAMP = 0.3
+SUBWAY_CAR_CAPACITY = 160.0  # 근거 데이터 없는 추정 정원 — K/MAX_BONUS와 같은 위상의 상수
+
+def net_change_discount(alighting_est, boarding_est, capacity):
+    net_change_ratio = (alighting_est - boarding_est) / capacity
+    clamped = max(-NET_CHANGE_CLAMP, min(NET_CHANGE_CLAMP, net_change_ratio))
+    return 1.0 - clamped
+
+def stop_correction_factor(stop_sequence, boarding_est=None, alighting_est=None):
+    if boarding_est is not None and alighting_est is not None:
+        return net_change_discount(alighting_est, boarding_est, SUBWAY_CAR_CAPACITY)
+    return stop_sequence_discount(stop_sequence)  # 폴백 — 배치가 아직 못 채운 행
+```
+
+기존 `stop_sequence_discount()`는 **완전히 대체되는 게 아니라 폴백으로 남는다** — `boarding_est`/
+`alighting_est` 둘 중 하나라도 없으면(배치 미반영) 그대로 쓴다. 두 값이 다 있을 때만 우선 적용.
+
+**7.2의 감산과 정반대인 지점**: `stop_sequence_discount()`는 항상 `factor ≤ 1.0`(보너스만 있고 페널티는
+없음)이지만, `net_change_discount()`는 순증가(승차>하차) 상황에서 `factor > 1.0`이 나올 수 있다 — 즉
+"더 혼잡해진다"는 방향도 표현할 수 있다. 이 때문에 `score_segment()`의 `base * factor`가 이론상 1.0을
+넘을 수 있어(예: `congestion_pct=140`인 역에 순증가가 겹치면), 최종적으로 `min(base * factor, 1.0)`
+클램프를 다시 적용해 Q1의 정규화 상한(0~1)을 지킨다.
+
+**DB 반영**: `station_weight`/`bus_weight`에 `boarding_est`/`alighting_est NUMERIC(10,2)` NULL 허용
+컬럼을 추가했다(01_schema.sql). NULL이면 위 폴백이 자동으로 적용되므로 배치 쪽 별도 마이그레이션
+순서 제약은 없다 — 컬럼이 비어 있는 동안은 기존 동작과 100% 동일하다.
+
+**테스트**: `test_scoring.py`에 `net_change_discount`/`stop_correction_factor`의 양방향성(순감소→factor<1,
+순증가→factor>1), 클램프, 폴백 우선순위, 환승역 시나리오에서 레거시 감산과 정반대 방향이 나오는지,
+그리고 `base*factor>1.0`이 되는 조합에서도 최종 점수가 1.0을 넘지 않는지를 추가했다. `weight_repository.py`
+쪽 SELECT에 새 컬럼 두 개를 추가하고 `test_weight_repository.py`에도 그 값이 실제로 조회되는지 확인을
+추가했다.
 
 ### 7.3 Q4 관련 추가 발견 — 버스는 반경 매칭 대신 ID 직접 매칭 가능 (확인 완료)
 

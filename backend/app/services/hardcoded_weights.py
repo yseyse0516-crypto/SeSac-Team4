@@ -14,6 +14,11 @@ time_slot/dow 구분은 아직 없음 — 실제 가중치 조회 연결 시(내
 STATION_WEIGHT도 (station_id, direction) 조합으로 키를 바꿨다 — 이제
 station_weight 테이블의 UNIQUE 키에 direction이 포함되므로, 이 placeholder도
 같은 모양을 흉내내야 direction.py 연동을 이 파일만으로 검증할 수 있다.
+
+2026-08-21 수정(backend.md §7.2.1): StationWeightRow/BusWeightRow에
+boarding_est/alighting_est 추가 — Q3가 stop_sequence 감산 대신 순증감
+(하차-승차) 기반 보정을 쓰도록 재개정됐다. station_id=5는 이 보정만
+검증하기 위한 전용 테스트 행이다(실제 역이 아님).
 """
 from dataclasses import dataclass
 from typing import Optional
@@ -33,6 +38,9 @@ class StationMaster:
 class StationWeightRow:
     congestion_pct: float
     stop_sequence: int
+    # 순증감 보정용(backend.md §7.2.1) — 둘 다 있을 때만 stop_sequence 감산 대신 사용된다.
+    boarding_est: Optional[float] = None
+    alighting_est: Optional[float] = None
 
 
 @dataclass
@@ -46,6 +54,8 @@ class BusStopMaster:
 class BusWeightRow:
     net_onboard: float
     stop_sequence: Optional[int] = None  # bus_weight엔 아직 이 컬럼이 없음 (backend.md §7.2)
+    boarding_est: Optional[float] = None
+    alighting_est: Optional[float] = None
 
 
 # 좌표는 odsay_sample_response.json 실제 값 그대로 (답십리→여의도 5호선 구간).
@@ -68,10 +78,21 @@ STATION_WEIGHT: dict[tuple[int, Optional[str]], StationWeightRow] = {
     (1, "하선"): StationWeightRow(congestion_pct=88.0, stop_sequence=9),
     (2, "상선"): StationWeightRow(congestion_pct=95.0, stop_sequence=3),
     (2, "하선"): StationWeightRow(congestion_pct=60.0, stop_sequence=7),
-    (3, "상선"): StationWeightRow(congestion_pct=140.0, stop_sequence=7),  # 도심 환승역 — 혼잡 최고조
+    # congestion_pct=140에 순증가(승차80>하차20)까지 겹쳐서 base*factor가 1.0을 넘길 수 있는
+    # 조합이다 — score_segment()의 최종 min(..., 1.0) 클램프를 실제로 검증하는 용도.
+    (3, "상선"): StationWeightRow(
+        congestion_pct=140.0, stop_sequence=7, boarding_est=80.0, alighting_est=20.0
+    ),  # 도심 환승역 — 혼잡 최고조
     (3, "하선"): StationWeightRow(congestion_pct=75.0, stop_sequence=3),
     (4, "상선"): StationWeightRow(congestion_pct=110.0, stop_sequence=16),
     (4, "하선"): StationWeightRow(congestion_pct=50.0, stop_sequence=2),
+    # station_id=5: 실제 마스터에는 없는 순증감 보정 전용 테스트 행(backend.md §7.2.1).
+    # stop_sequence=2라 레거시 감산은 "출고 인접"으로 보고 보너스(factor<1)를 주지만,
+    # 실제로는 승차(52)가 하차(18)보다 훨씬 많아 실제로는 더 혼잡해지는 환승역 시나리오다.
+    # 순증감 보정은 이런 행에서 레거시와 정반대 방향(factor>1)을 내야 한다.
+    (5, "상선"): StationWeightRow(
+        congestion_pct=80.0, stop_sequence=2, boarding_est=52.0, alighting_est=18.0
+    ),
 }
 
 # stop_std_id(=ODsay localStationID)는 실제 정류장마스터 CSV와 대조 확인된 값.

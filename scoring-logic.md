@@ -11,7 +11,7 @@
 | 파일 | 역할 | 담당 |
 |---|---|---|
 | `backend/app/services/matching.py` | Q4 — ODsay 좌표/ID를 텅텅 DB의 station_id/stop_id로 매칭 | A |
-| `backend/app/services/scoring.py` | Q1(혼잡 점수) + Q3(정차순번 감산) | A |
+| `backend/app/services/scoring.py` | Q1(혼잡 점수) + Q3(정차순번 감산 / 순증감 보정) | A |
 | `backend/app/services/filtering.py` | Q2 — baseline 선정 + 분당개선 필터링 + 추천 선정 | A |
 | `backend/app/services/hardcoded_weights.py` | ⚠️ 임시 가중치 데이터(placeholder) — 실제 배치 DB 연결 전까지 사용 | A |
 | `backend/app/services/odsay_parser.py` | ODsay 원본 응답을 위 로직이 쓸 수 있는 구조로 변환 | A |
@@ -116,9 +116,35 @@ A 전담 파일이라 A 단독으로 완만한 램프 방식으로 바꿨다(bac
 | 8 이상 | 0.0 | 1.00 | 보너스 없음(원래 점수 그대로) |
 | `None`(순번 정보 없음) | — | 1.00 | 보너스 없음(중립 처리) |
 
-K/MAX_BONUS는 **근거 데이터 없는 추정 상수**다(원안도 마찬가지). 버스는 아직 `bus_weight`에
-`stop_sequence` 컬럼이 없어(§7.2, 김재우님 확인 대기 중) 지금은 버스 구간에 항상 `factor=1.0`
-(보너스 없음)이 적용된다 — 데이터가 붙기 전까지는 의도된 동작이다.
+K/MAX_BONUS는 **근거 데이터 없는 추정 상수**다(원안도 마찬가지). 버스는 이후 `bus_weight`에
+`stop_sequence` 컬럼이 실제로 붙었다(2026-08-20 배치 작업).
+
+### 4.1 재개정 — 순증감(하차−승차) 기반 보정 (2026-08-21, backend.md §7.2.1)
+
+위 감산은 "출고역에서 멀수록 혼잡하다"는 가정 하나에만 기대는 대리 지표라, 환승역처럼 초반
+정차순번에 대량 하차가 몰리는 지점에서는 실제와 반대 방향의 보너스를 준다는 게 외부 검토
+보고서(`TangTang_혼잡도_스코어링_로직_기술보고서_수정.md`)에서 지적됐다. `boarding_est`/
+`alighting_est`(배치가 채우는 승하차 추정치)가 둘 다 있으면 이 값으로 직접 보정하고, 없으면
+위 `stop_sequence_discount()`로 폴백한다.
+
+```python
+NET_CHANGE_CLAMP = 0.3
+SUBWAY_CAR_CAPACITY = 160.0
+
+net_change_ratio = (alighting_est - boarding_est) / capacity
+factor = 1.0 - clamp(net_change_ratio, -NET_CHANGE_CLAMP, NET_CHANGE_CLAMP)
+```
+
+**7.2와의 핵심 차이**: `stop_sequence_discount()`는 항상 `factor ≤ 1.0`(보너스만 표현 가능)이지만,
+이 함수는 순증가(승차>하차) 상황에서 `factor > 1.0`이 나온다 — "더 혼잡해진다"는 방향도 표현할 수
+있다는 뜻이다. 그래서 `base * factor`가 1.0을 넘을 수 있고, `score_segment()`가 최종적으로
+`min(base * factor, 1.0)`을 다시 적용해 Q1의 0~1 정규화를 지킨다.
+
+| 시나리오 | stop_sequence 감산 | 순증감 보정 |
+|---|---|---|
+| 초반 정차, 순감소(하차>승차) | 큰 보너스(factor<1) | 보너스(factor<1) — 방향 일치 |
+| 초반 정차, 순증가(승차>하차, 환승역) | 큰 보너스(factor<1) — **오판** | 페널티(factor>1) — 실제와 일치 |
+| 후반 정차, 데이터 없음(배치 미반영) | 보너스 없음(factor=1) | 폴백으로 동일하게 처리 |
 
 ---
 
@@ -210,8 +236,13 @@ congestion_score`, 항상 유한하고 이 케이스에서는 항상 0보다 큼
 |---|---|
 | Q1 방향/공식 | `test_scoring.py::test_subway_score_uses_congestion_pct_and_divisor` 등 |
 | Q1 상한(1.0 cap) | `test_score_capped_at_one` |
-| Q3 방향(단조성) | `test_stop_sequence_discount_monotonically_increases_toward_one` |
+| Q3 방향(단조성, 레거시 폴백) | `test_stop_sequence_discount_monotonically_increases_toward_one` |
 | Q3 경계값 | `test_stop_sequence_discount_none_is_neutral` |
+| Q3 순증감 양방향성(2026-08-21) | `test_net_change_discount_below_one_when_alighting_exceeds_boarding`, `test_net_change_discount_above_one_when_boarding_exceeds_alighting` |
+| Q3 순증감 클램프 | `test_net_change_discount_clamps_extreme_ratio` |
+| Q3 우선순위/폴백 | `test_stop_correction_factor_prefers_net_change_when_both_present`, `test_stop_correction_factor_falls_back_when_net_change_missing` |
+| Q3 환승역 반전 시나리오 | `test_subway_score_net_change_reverses_legacy_bonus_at_transfer_station` |
+| Q1×Q3 합성 후 재클램프 | `test_score_segment_still_capped_at_one_when_net_change_factor_above_one` |
 | Q4 지하철 반경 매칭 | `test_matching.py` |
 | Q4 버스 ID 직접 매칭 | `test_matching.py`, `test_search_router.py::test_bus_segment_has_matched_stop_id_when_known` |
 | Q2 baseline 선정 | `test_filtering.py::test_baseline_is_fastest_candidate` |

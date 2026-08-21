@@ -66,7 +66,13 @@ CREATE TABLE station_weight (
     dow               SMALLINT NOT NULL,    -- 0=월 .. 6=일
     net_onboard       NUMERIC(10,2),        -- 재차인원
     congestion_pct    NUMERIC(6,2),         -- %혼잡도 (Q1 subway_score = min(congestion_pct/150, 1.0))
-    stop_sequence     SMALLINT,             -- 정차순번 (완만한 가우시안 감쇠 계수, 실제 적용은 services/scoring.py)
+    stop_sequence     SMALLINT,             -- 정차순번 (레거시 감산 계수 — 순증감 값이 없을 때만 fallback, services/scoring.py)
+    -- 순증감 보정(2026-08-21, backend.md §7.2.1): stop_sequence는 "출고역에서 멀수록 혼잡"이라는
+    -- 가정 하나에만 기대는 대리 지표라 환승역처럼 하차가 몰리는 지점에서 실제와 반대로 보너스를
+    -- 준다. 하차/승차 추정치가 있으면 (하차-승차)/정원 기반 보정으로 대체한다 — NULL 허용:
+    -- 배치가 아직 이 값을 못 채운 행은 stop_sequence 기반 감산으로 자연히 폴백한다.
+    boarding_est      NUMERIC(10,2),        -- 승차 추정치
+    alighting_est     NUMERIC(10,2),        -- 하차 추정치
     UNIQUE (station_id, batch_id, time_slot, dow, direction)
 );
 
@@ -80,6 +86,8 @@ CREATE TABLE bus_weight (
     net_onboard    NUMERIC(10,2), -- Q1 bus_score = min(net_onboard/50, 1.0)
     stop_sequence  SMALLINT, -- 정차순번 (backend.md §7.2/§7.3에서 A가 요청한 컬럼, 2026-08-20 배치 작업으로 추가.
                               -- 서울시 노선별 정류소정보 마스터의 '정류장_순서'로 채운다 — bus_stop_sync.py/bus_weight_sync.py 참고)
+    boarding_est   NUMERIC(10,2), -- 승차 추정치 (순증감 보정, backend.md §7.2.1 — station_weight와 동일 정책)
+    alighting_est  NUMERIC(10,2), -- 하차 추정치
     UNIQUE (stop_id, route_id, batch_id, time_slot, dow)
 );
 

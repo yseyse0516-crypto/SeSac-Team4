@@ -93,7 +93,7 @@ def get_station_weight(cur, station_id: int, direction: Optional[str], dt: datet
     if batch_id is None:
         return None
     cur.execute(
-        "SELECT congestion_pct, stop_sequence FROM station_weight "
+        "SELECT congestion_pct, stop_sequence, boarding_est, alighting_est FROM station_weight "
         "WHERE station_id = %s AND batch_id = %s AND direction = %s "
         "AND time_slot = %s AND dow = %s",
         (station_id, batch_id, direction, time_slot_for(dt), dt.weekday()),
@@ -109,7 +109,7 @@ def get_bus_weight(cur, stop_id: int, route_id: Optional[str], dt: datetime) -> 
     if batch_id is None:
         return None
     cur.execute(
-        "SELECT net_onboard, stop_sequence FROM bus_weight "
+        "SELECT net_onboard, stop_sequence, boarding_est, alighting_est FROM bus_weight "
         "WHERE stop_id = %s AND route_id = %s AND batch_id = %s "
         "AND time_slot = %s AND dow = %s",
         (stop_id, route_id, batch_id, time_slot_for(dt), dt.weekday()),

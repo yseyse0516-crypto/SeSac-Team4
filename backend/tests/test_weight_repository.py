@@ -122,6 +122,10 @@ def test_get_station_weight_matches_direction_time_slot_dow(seeded_rows):
     assert row is not None
     assert float(row["congestion_pct"]) == 90.0
     assert row["stop_sequence"] == 3
+    # 2026-08-21 추가(§7.2.1): 순증감 보정 컬럼이 SELECT에 포함돼야 한다.
+    # seeded_rows는 이 두 컬럼을 안 채우므로 NULL(None)로 나와야 정상.
+    assert row["boarding_est"] is None
+    assert row["alighting_est"] is None
 
 
 def test_get_station_weight_none_direction_returns_none(seeded_rows):
@@ -142,6 +146,8 @@ def test_get_bus_weight_matches_stop_route_time_slot_dow(seeded_rows):
     assert row is not None
     assert float(row["net_onboard"]) == 20.0
     assert row["stop_sequence"] == 6
+    assert row["boarding_est"] is None
+    assert row["alighting_est"] is None
 
 
 def test_get_bus_weight_missing_route_id_returns_none(seeded_rows):
