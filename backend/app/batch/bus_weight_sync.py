@@ -3,12 +3,13 @@
 입력: backend/app/batch/data/텅텅_버스구간별재차인원추정-2026_08_20생성.csv
   (노선번호/정류장ID/정류소명/순번 + 승차_00시~23시/하차_00시~23시/재차인원_00시~23시,
   38,599개 노선×정류장 조합). 방법론: 텅텅_버스구간별재차인원추정_방법론및한계-
-  2026_08_20생성.md. bus_weight 테이블엔 net_onboard(재차인원)만 저장한다 —
+  2026_08_20생성.md. bus_weight의 Q1 스코어링은 net_onboard(재차인원)만 쓴다 —
   %혼잡도(텅텅_버스구간별혼잡도추정-2026_08_20수정.csv)는 Q1 공식이 쓰지 않는
   보조 지표라 이 배치 대상이 아니다(CLAUDE.md 확정 스코어링: bus_score =
-  min(net_onboard/50, 1.0), %혼잡도가 아니라 재차인원 그대로 사용).
+  min(net_onboard/50, 1.0), %혼잡도가 아니라 재차인원 그대로 사용). 승차/하차
+  추정치는 Q1이 아니라 Q3 순증감 보정(backend.md §7.2.1)에 쓰인다 — 아래 4) 참고.
 
-이 모듈이 원본 CSV로부터 직접 계산/변환하는 것 3가지:
+이 모듈이 원본 CSV로부터 직접 계산/변환하는 것 4가지:
   1) stop_id 조회 — bus_stop 테이블을 stop_std_id(=정류장ID)로 미리 로드해 매핑.
   2) 시간대(00시~23시 컬럼) → time_slot(예: '08:00-09:00') 와이드→롱 변환.
      station_weight와 동일한 'HH:00-(HH+1):00' 포맷을 써서, 나중에 지하철/버스
@@ -16,6 +17,10 @@
   3) stop_sequence — 원본 CSV의 '순번' 컬럼을 그대로 쓴다. 지하철과 달리 이건
      근사치가 아니라 실측값이다(서울시버스노선별정류소정보의 노선 내 정차순번을
      그대로 이어받은 것 — 기점부터 몇 번째 정류장인지가 정확히 나온다).
+  4) boarding_est/alighting_est(2026-08-21, backend.md §7.2.1) — 원본의
+     '승차_HH시'/'하차_HH시' 컬럼도 재차인원과 동일한 방식으로 와이드→롱 변환한다.
+     Q3가 순증감 보정으로 재개정되면서 scoring.py가 이 두 값이 둘 다 있을 때
+     stop_sequence 감산 대신 우선 적용한다.
 
 ⚠️ 순환버스 중복 정류장 처리 — 로컬 검증 중 발견한 문제. 일부 노선(예: 0017,
 01A, 01B 등 순환/셔틀형 노선)은 같은 정류장을 한 바퀴 안에 두 번 이상 지난다
@@ -29,7 +34,9 @@
 "더 혼잡했다고, 더 출고에서 멀다고 보수적으로 가정"하는 방향 — 혼잡 회피가
 목적인 서비스에서 실제보다 덜 혼잡하다고 알려주는 쪽보다는 안전하다). 순환
 노선의 두 번째 통과가 첫 번째보다 보통 더 혼잡한 경향(위 예시가 그렇듯)과도
-방향이 맞는다.
+방향이 맞는다. boarding_est/alighting_est도 같은 이유로 최댓값 병합한다 —
+이 값들도 결국 net_onboard와 같은 "더 혼잡한 쪽으로 보수적으로 가정" 정책을
+따라야 정합성이 깨지지 않는다.
 
 ⚠️ dow(요일) 정책 — 원본 재차인원 자체가 "2026년 6월 한 달 합계 ÷ 30"으로 만든
 평일/주말 구분 없는 근사치다(방법론 md 4절 한계). 이 배치는 그 근사치를 **평일만**
@@ -68,18 +75,22 @@ _CREATE_TEMP_SQL = """
     CREATE TEMP TABLE _bus_weight_staging (
         stop_id INT, route_id VARCHAR(20), batch_id INT,
         time_slot VARCHAR(20), dow SMALLINT,
-        net_onboard NUMERIC(10,2), stop_sequence SMALLINT
+        net_onboard NUMERIC(10,2), stop_sequence SMALLINT,
+        boarding_est NUMERIC(10,2), alighting_est NUMERIC(10,2)
     ) ON COMMIT DROP
 """
 
 _MERGE_SQL = """
-    INSERT INTO bus_weight (stop_id, route_id, batch_id, time_slot, dow, net_onboard, stop_sequence)
+    INSERT INTO bus_weight (stop_id, route_id, batch_id, time_slot, dow, net_onboard, stop_sequence,
+                             boarding_est, alighting_est)
     SELECT stop_id, route_id, batch_id, time_slot, dow,
-           MAX(net_onboard) AS net_onboard, MAX(stop_sequence) AS stop_sequence
+           MAX(net_onboard) AS net_onboard, MAX(stop_sequence) AS stop_sequence,
+           MAX(boarding_est) AS boarding_est, MAX(alighting_est) AS alighting_est
     FROM _bus_weight_staging
     GROUP BY stop_id, route_id, batch_id, time_slot, dow
     ON CONFLICT (stop_id, route_id, batch_id, time_slot, dow)
-    DO UPDATE SET net_onboard = EXCLUDED.net_onboard, stop_sequence = EXCLUDED.stop_sequence
+    DO UPDATE SET net_onboard = EXCLUDED.net_onboard, stop_sequence = EXCLUDED.stop_sequence,
+                  boarding_est = EXCLUDED.boarding_est, alighting_est = EXCLUDED.alighting_est
 """
 
 
@@ -100,10 +111,17 @@ def _iter_staging_tuples(raw_rows: list[dict], stop_lookup: dict, batch_id: int)
         for h in range(24):
             net_onboard_raw = r.get(f"재차인원_{h:02d}시")
             net_onboard = float(net_onboard_raw) if net_onboard_raw not in (None, "") else None
+            boarding_raw = r.get(f"승차_{h:02d}시")
+            boarding_est = float(boarding_raw) if boarding_raw not in (None, "") else None
+            alighting_raw = r.get(f"하차_{h:02d}시")
+            alighting_est = float(alighting_raw) if alighting_raw not in (None, "") else None
             time_slot = f"{h:02d}:00-{h + 1:02d}:00"
 
             for dow in _WEEKDAY_DOWS:
-                yield (stop_id, route_id, batch_id, time_slot, dow, net_onboard, stop_sequence)
+                yield (
+                    stop_id, route_id, batch_id, time_slot, dow,
+                    net_onboard, stop_sequence, boarding_est, alighting_est,
+                )
 
 
 def sync_bus_weight(cur, batch_id: int) -> int:

@@ -6,7 +6,7 @@
    규칙 기반 최종본이다 — 자세한 근거는 텅텅_지하철방향별재차인원추정_방법론및한계-
    2026_08_20수정3.md 참고.
 
-이 모듈이 하는 일 4가지 (전부 원본 CSV에 없어 이 배치가 직접 계산/변환하는 부분):
+이 모듈이 하는 일 5가지 (전부 원본 CSV에 없어 이 배치가 직접 계산/변환하는 부분):
   1) station_id 조회 — station 테이블을 (line_name, station_no)로 미리 로드해 매핑.
   2) 요일유형(평일/토요일/일요일) → dow(0~6) 변환.
   3) 시간대(예: '08-09시간대') → time_slot(예: '08:00-09:00') 표준 포맷 변환.
@@ -14,6 +14,11 @@
      기반 출고역 이후 정차 횟수, 명세서 4절 방식)은 아직 배치에 연결되지 않은
      별도 과제라, 이번엔 "노선의 물리적 순서상 종점으로부터 몇 번째 역인가"로
      근사한다 — 상세 근거는 아래 STOP_SEQUENCE 설명 및 방법론 md 참고.
+  5) boarding_est/alighting_est 반영(2026-08-21, backend.md §7.2.1) — 원본 CSV의
+     '승차_추정'/'하차_추정' 컬럼을 그대로 옮겨 담는다(변환 불필요). Q3가 순증감
+     보정으로 재개정되면서 scoring.py가 이 두 컬럼이 둘 다 있을 때 stop_sequence
+     감산 대신 우선 적용한다 — 비어 있으면 None으로 넣어 기존 폴백이 그대로
+     동작한다.
 
 ⚠️ stop_sequence는 근사치다. 열차가 항상 종점부터 종점까지 완주한다고 가정하는데,
 실제로는 단축운행(중간 기점 출발) 열차가 있어 진짜 "출고 이후 정차 횟수"보다 작게
@@ -154,6 +159,8 @@ def sync_station_weight(cur, batch_id: int) -> int:
         stop_sequence = _stop_sequence(line, direction, station_no, simple_orders)
         net_onboard = float(r["재차인원_추정"]) if r["재차인원_추정"] else None
         congestion_pct = float(r["혼잡도"]) if r["혼잡도"] else None
+        boarding_est = float(r["승차_추정"]) if r["승차_추정"] else None
+        alighting_est = float(r["하차_추정"]) if r["하차_추정"] else None
 
         for dow in _DOW_MAP[r["요일유형"]]:
             insert_rows.append(
@@ -166,6 +173,8 @@ def sync_station_weight(cur, batch_id: int) -> int:
                     "net_onboard": net_onboard,
                     "congestion_pct": congestion_pct,
                     "stop_sequence": stop_sequence,
+                    "boarding_est": boarding_est,
+                    "alighting_est": alighting_est,
                 }
             )
 
@@ -174,14 +183,17 @@ def sync_station_weight(cur, batch_id: int) -> int:
 
     _UPSERT_SQL = """
         INSERT INTO station_weight
-            (station_id, batch_id, direction, time_slot, dow, net_onboard, congestion_pct, stop_sequence)
+            (station_id, batch_id, direction, time_slot, dow, net_onboard, congestion_pct,
+             stop_sequence, boarding_est, alighting_est)
         VALUES
             (%(station_id)s, %(batch_id)s, %(direction)s, %(time_slot)s, %(dow)s,
-             %(net_onboard)s, %(congestion_pct)s, %(stop_sequence)s)
+             %(net_onboard)s, %(congestion_pct)s, %(stop_sequence)s, %(boarding_est)s, %(alighting_est)s)
         ON CONFLICT (station_id, batch_id, time_slot, dow, direction)
         DO UPDATE SET net_onboard = EXCLUDED.net_onboard,
                       congestion_pct = EXCLUDED.congestion_pct,
-                      stop_sequence = EXCLUDED.stop_sequence
+                      stop_sequence = EXCLUDED.stop_sequence,
+                      boarding_est = EXCLUDED.boarding_est,
+                      alighting_est = EXCLUDED.alighting_est
     """
     cur.executemany(_UPSERT_SQL, insert_rows)
     return len(insert_rows)
