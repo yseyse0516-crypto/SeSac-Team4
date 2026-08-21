@@ -17,67 +17,89 @@ const NAV_ITEMS: { key: Screen; label: string }[] = [
   { key: "account", label: "계정" },
 ];
 
+// 로그인이 필요한 화면 (그 외 화면은 비회원도 그대로 이용 가능).
+const AUTH_REQUIRED_SCREENS: Screen[] = ["community", "account"];
+
 function App() {
-  const [screen, setScreen] = useState<Screen>("auth");
+  const [screen, setScreen] = useState<Screen>("routing");
   const [nickname, setNickname] = useState("익명");
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  // 로그인이 필요해서 auth 화면으로 보냈을 때, 로그인 성공 후 원래 가려던 화면으로 되돌아가기 위한 값.
+  const [pendingScreen, setPendingScreen] = useState<Screen>("community");
+
+  function handleNavClick(target: Screen) {
+    if (AUTH_REQUIRED_SCREENS.includes(target) && !isLoggedIn) {
+      setPendingScreen(target);
+      setScreen("auth");
+      return;
+    }
+    setScreen(target);
+  }
 
   function handleLogout() {
-    setScreen("auth");
+    setIsLoggedIn(false);
+    setNickname("익명");
+    setScreen("routing");
   }
 
   function handleWithdraw() {
     clearAllSandboxData();
+    setIsLoggedIn(false);
     setNickname("익명");
-    setScreen("auth");
+    setScreen("routing");
   }
+
+  // 로그인 없이 community/account 화면에 직접 들어온 경우를 대비한 방어적 가드.
+  const effectiveScreen: Screen =
+    AUTH_REQUIRED_SCREENS.includes(screen) && !isLoggedIn ? "auth" : screen;
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
       <InfoSidebar />
 
-      {screen !== "auth" && (
-        <nav
-          style={{
-            display: "flex",
-            gap: 8,
-            padding: "12px 20px",
-            borderBottom: "1px solid var(--border)",
-            background: "var(--surface)",
-          }}
-        >
-          {NAV_ITEMS.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => setScreen(item.key)}
-              style={{
-                background: screen === item.key ? "var(--primary)" : "var(--surface-muted)",
-                color: screen === item.key ? "white" : "var(--text)",
-                border: "none",
-                borderRadius: "var(--radius-chip)",
-                padding: "8px 16px",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      )}
+      <nav
+        style={{
+          display: "flex",
+          gap: 8,
+          padding: "12px 20px",
+          borderBottom: "1px solid var(--border)",
+          background: "var(--surface)",
+        }}
+      >
+        {NAV_ITEMS.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => handleNavClick(item.key)}
+            style={{
+              background: effectiveScreen === item.key ? "var(--primary)" : "var(--surface-muted)",
+              color: effectiveScreen === item.key ? "white" : "var(--text)",
+              border: "none",
+              borderRadius: "var(--radius-chip)",
+              padding: "8px 16px",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            {item.label}
+          </button>
+        ))}
+      </nav>
 
-      {screen === "auth" && (
+      {effectiveScreen === "auth" && (
         <AuthPage
+          reason={pendingScreen === "account" ? "account" : "community"}
           onLoggedIn={(name) => {
             setNickname(name);
-            setScreen("routing");
+            setIsLoggedIn(true);
+            setScreen(pendingScreen);
           }}
         />
       )}
-      {screen === "routing" && <RouteSearchPage />}
-      {screen === "community" && <CommunityPage defaultAuthor={nickname} />}
-      {screen === "account" && (
+      {effectiveScreen === "routing" && <RouteSearchPage />}
+      {effectiveScreen === "community" && <CommunityPage defaultAuthor={nickname} />}
+      {effectiveScreen === "account" && (
         <AccountPage
           nickname={nickname}
           onChangeNickname={setNickname}

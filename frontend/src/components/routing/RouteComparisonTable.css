@@ -7,9 +7,38 @@
   margin-bottom: 8px;
 }
 
+.route-comparison__tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.route-comparison__tab {
+  flex: 1;
+  background: var(--surface-muted);
+  color: var(--text-sub);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.route-comparison__tab--active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
 .route-comparison__summary {
   display: flex;
   gap: 8px;
+}
+
+.route-comparison__summary-card--static {
+  cursor: default;
+  width: 100%;
 }
 
 .route-comparison__summary-card {
@@ -58,18 +87,6 @@
 .route-comparison__summary-sub {
   font-size: 11px;
   color: var(--text-sub);
-}
-
-.route-comparison__toggle {
-  display: block;
-  margin: 8px auto 0;
-  background: none;
-  border: none;
-  color: var(--primary);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0;
 }
 
 .route-comparison__table {

@@ -26,21 +26,6 @@
   pointer-events: none;
 }
 
-.search-map__bike-toggle {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  z-index: 15;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-card);
-  font-size: 15px;
-  cursor: pointer;
-}
-
 .search-map__fallback {
   width: 100%;
   height: 100%;
@@ -100,4 +85,36 @@
   height: 10px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+.search-map__endpoint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-chip);
+  font-size: 12px;
+  font-weight: 700;
+  color: white;
+  white-space: nowrap;
+  box-shadow: var(--shadow-card);
+}
+
+.search-map__endpoint--origin {
+  background: #2f6fe4;
+}
+
+.search-map__endpoint--destination {
+  background: #e5484d;
+}
+
+.search-map__stop-label {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  padding: 3px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+  box-shadow: var(--shadow-card);
 }

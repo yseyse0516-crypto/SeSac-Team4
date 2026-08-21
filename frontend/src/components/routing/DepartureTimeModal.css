@@ -1,0 +1,140 @@
+.departure-modal__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 100;
+}
+
+.departure-modal__sheet {
+  width: 100%;
+  max-width: 480px;
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 16px 16px 0 0;
+  padding: 18px 18px 22px;
+  box-shadow: var(--shadow-card);
+}
+
+.departure-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.departure-modal__header h3 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.departure-modal__close {
+  background: none;
+  border: none;
+  color: var(--text-sub);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.departure-modal__toggle-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.departure-modal__toggle-title {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.departure-modal__toggle-desc {
+  font-size: 12px;
+  color: var(--text-sub);
+  margin: 0;
+  max-width: 320px;
+}
+
+.departure-modal__switch {
+  flex-shrink: 0;
+  width: 44px;
+  height: 26px;
+  border-radius: 13px;
+  border: none;
+  background: var(--border);
+  position: relative;
+  cursor: pointer;
+}
+
+.departure-modal__switch--on {
+  background: var(--primary);
+}
+
+.departure-modal__switch-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: white;
+  transition: transform 0.15s ease;
+}
+
+.departure-modal__switch--on .departure-modal__switch-knob {
+  transform: translateX(18px);
+}
+
+.departure-modal__pickers {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 20px 0;
+}
+
+.departure-modal__pickers select {
+  padding: 8px 6px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.departure-modal__colon {
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.departure-modal__actions {
+  display: flex;
+  gap: 10px;
+}
+
+.departure-modal__now,
+.departure-modal__confirm {
+  flex: 1;
+  border: none;
+  border-radius: var(--radius-control);
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.departure-modal__now {
+  background: var(--surface-muted);
+  color: var(--text);
+}
+
+.departure-modal__confirm {
+  background: var(--primary);
+  color: white;
+}

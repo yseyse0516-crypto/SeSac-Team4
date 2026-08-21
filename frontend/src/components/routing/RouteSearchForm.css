@@ -126,6 +126,25 @@
   background: var(--primary-hover);
 }
 
+.route-search-form__departure-row {
+  margin-top: 10px;
+}
+
+.route-search-form__departure-chip {
+  background: var(--surface-muted);
+  color: var(--primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.route-search-form__departure-chip:hover {
+  border-color: var(--primary);
+}
+
 .route-search-form__favorites {
   margin-top: 8px;
   display: flex;
@@ -203,4 +222,41 @@
   font-size: 12px;
   cursor: pointer;
   text-decoration: underline;
+}
+
+.route-search-form__popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.route-search-form__popup-card {
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius-card);
+  padding: 20px 24px;
+  box-shadow: var(--shadow-card);
+  text-align: center;
+  min-width: 240px;
+}
+
+.route-search-form__popup-card p {
+  margin: 0 0 14px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.route-search-form__popup-card button {
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-control);
+  padding: 8px 24px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
 }

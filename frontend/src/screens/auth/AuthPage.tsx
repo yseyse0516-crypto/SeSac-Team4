@@ -34,9 +34,21 @@ type AuthMode = "login" | "signup";
 
 interface AuthPageProps {
   onLoggedIn: (nickname: string) => void;
+  reason?: "community" | "account";
 }
 
-export function AuthPage({ onLoggedIn }: AuthPageProps) {
+const REASON_SUBTITLE: Record<"login" | "signup", Record<"community" | "account", string>> = {
+  login: {
+    community: "커뮤니티는 로그인해야 이용할 수 있어요.",
+    account: "계정 정보를 보려면 로그인해 주세요.",
+  },
+  signup: {
+    community: "가입하고 로그인해서 커뮤니티를 이용해보세요.",
+    account: "가입하고 로그인해서 계정을 만들어보세요.",
+  },
+};
+
+export function AuthPage({ onLoggedIn, reason = "community" }: AuthPageProps) {
   const [mode, setMode] = useState<AuthMode>("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -95,9 +107,7 @@ export function AuthPage({ onLoggedIn }: AuthPageProps) {
     <div className="auth-page">
       <div className="auth-page__card">
         <h1 className="auth-page__title">BIUM {mode === "login" ? "로그인" : "회원가입"}</h1>
-        <p className="auth-page__subtitle">
-          {mode === "login" ? "로그인하고 혼잡회피 경로를 찾아보세요." : "가입하고 로그인해서 시작해보세요."}
-        </p>
+        <p className="auth-page__subtitle">{REASON_SUBTITLE[mode][reason]}</p>
 
         {notice && <p className="auth-page__notice">{notice}</p>}
 

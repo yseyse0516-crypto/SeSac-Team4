@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { RouteSearchForm, type RouteSearchValues } from "../../components/routing/RouteSearchForm";
 import { ViewModeToolbar, type ViewMode } from "../../components/routing/ViewModeToolbar";
-import { NearbyBikeDocks } from "../../components/routing/NearbyBikeDocks";
+import { BikeDockFinder } from "../../components/routing/BikeDockFinder";
 import { RouteComparisonTable } from "../../components/routing/RouteComparisonTable";
 import { fetchRoutes, RouteSearchError } from "../../api/routes";
 import type { RouteCandidate } from "../../types/routing";
@@ -48,11 +48,15 @@ export function RouteSearchPage() {
   const [lastValues, setLastValues] = useState<RouteSearchValues | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("map");
   const [onlyRecommended, setOnlyRecommended] = useState(false);
+  // "전체" 탭에서 최단시간/추천 카드 선택 상태 — 지도가 선택된 경로만 상세히 보여줘야 해서
+  // RouteComparisonTable과 RouteSearchForm(지도)이 같이 참조하도록 여기서 들고 있는다.
+  const [selectedComparison, setSelectedComparison] = useState<"fastest" | "recommended" | null>(null);
 
   async function handleSearch(values: RouteSearchValues) {
     setLoading(true);
     setError(null);
     setLastValues(values);
+    setSelectedComparison(null);
 
     const debugError = DEBUG_ERROR_TRIGGER[values.destinationText.trim()];
     if (debugError) {
@@ -73,10 +77,11 @@ export function RouteSearchPage() {
     }
 
     try {
-      // 기준시간 입력을 없앴으므로 departure_time을 안 보내면, 백엔드가 현재 시각 기준으로 조회한다.
+      // "지금 출발"(departureTime 미지정)이면 departure_time을 안 보내고, 백엔드가 현재 시각 기준으로 조회한다.
       const response = await fetchRoutes({
         origin: values.originCoords,
         destination: values.destinationCoords,
+        departure_time: values.departureTime,
       });
       if (response.candidates.length === 0) {
         setRoutes([]);
@@ -92,6 +97,24 @@ export function RouteSearchPage() {
     }
   }
 
+  const selectedRoute =
+    selectedComparison === "fastest"
+      ? routes.find((r) => r.is_fastest) ?? routes[0] ?? null
+      : selectedComparison === "recommended"
+        ? routes.find((r) => r.is_recommended) ?? routes[0] ?? null
+        : null;
+
+  // 자전거 탭은 출발지/도착지 검색 흐름을 아예 안 쓰는 별도 화면이라(§ 요청: "다른거랑 달리
+  // 비교적 심플하게") 여기서 완전히 분기한다.
+  if (viewMode === "bike") {
+    return (
+      <div style={{ maxWidth: 720, margin: "0 auto", padding: "12px 20px" }}>
+        <ViewModeToolbar value={viewMode} onChange={setViewMode} />
+        <BikeDockFinder />
+      </div>
+    );
+  }
+
   return (
     <div style={{ maxWidth: 720, margin: "0 auto", padding: "12px 20px" }}>
       <ViewModeToolbar value={viewMode} onChange={setViewMode} />
@@ -100,7 +123,7 @@ export function RouteSearchPage() {
         searchCategory={viewMode}
         routes={routes}
         onlyRecommended={onlyRecommended}
-        showBikeToggle={viewMode === "bike"}
+        selectedRoute={selectedRoute}
       />
 
       <div className="route-options-bar">
@@ -166,10 +189,11 @@ export function RouteSearchPage() {
       )}
 
       {!loading && !error && routes.length > 0 && lastValues?.originCoords && (
-        <>
-          <RouteComparisonTable routes={routes} />
-          {viewMode === "bike" && <NearbyBikeDocks from={lastValues.originCoords} />}
-        </>
+        <RouteComparisonTable
+          routes={routes}
+          selected={selectedComparison}
+          onSelectedChange={setSelectedComparison}
+        />
       )}
     </div>
   );
