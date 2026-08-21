@@ -2,8 +2,8 @@
 // 실제 선착순 동시성 처리는 이 코드가 아니라 백엔드 Redis에서 해야 한다 — 여기선 브라우저 하나 안에서의
 // 흐름(받기 → 소진 확인)만 흉내낸다.
 
-const REMAINING_KEY = "bium_sandbox_coupon_remaining";
-const CLAIMED_KEY = "bium_sandbox_coupon_claimed";
+const REMAINING_KEY = "tangtang_sandbox_coupon_remaining";
+const CLAIMED_KEY = "tangtang_sandbox_coupon_claimed";
 const INITIAL_REMAINING = 37;
 
 export function getRemaining(): number {

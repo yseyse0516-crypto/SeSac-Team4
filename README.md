@@ -1,4 +1,4 @@
-# BIUM
+# 텅텅 (TangTang)
 
 재차인원(net onboard) 기반 서울 통근 혼잡회피 서비스. 표시되는 혼잡도는 "하차 전" 상태라, 실제로는 대량 하차 직후 훨씬 여유로운 경우가 많다는 데이터 기반 인사이트에서 출발했다.
 
@@ -19,7 +19,7 @@
 | 캐시 | Redis | ODsay 응답 캐시, 일일 호출 카운터, 따릉이 재고 캐시 (로그인 세션 없음) |
 | 리버스 프록시 | nginx | FastAPI 앞단 |
 | 외부 API | ODsay LAB 경로탐색 API | 요청 1건당 1회 호출 |
-| 배포 | AWS (`bium-vpc`, `10.0.0.0/16`) → Kubernetes (2차, 연습용) | |
+| 배포 | AWS (`tangtang-vpc`, `10.0.0.0/16`) → Kubernetes (2차, 연습용) | |
 
 ## 팀
 
@@ -89,7 +89,7 @@ npm run dev
 
 | 구분 | 값 |
 |---|---|
-| VPC | `bium-vpc`, `10.0.0.0/16` (2 AZ × Public/Front(예약)/API/DB 4계층) |
+| VPC | `tangtang-vpc`, `10.0.0.0/16` (2 AZ × Public/Front(예약)/API/DB 4계층) |
 | 배포 환경 | AWS ({EC2 / ECS 등 — 확정 후 기입}) |
 | URL | {배포 URL} |
 | 2차(연습) | Kubernetes |

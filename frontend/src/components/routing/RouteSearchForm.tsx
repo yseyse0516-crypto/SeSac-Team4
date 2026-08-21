@@ -37,7 +37,7 @@ async function searchPlace(keyword: string): Promise<LatLng | null> {
 // 출발지/도착지 + 즐겨찾기 + 탐색버튼. 기준시간 입력은 뺐다 — 실행하는 시점의 현재 시간
 // 기준으로 바로 조회하면 되는 기능이라 별도 입력이 불필요하다는 판단 (RouteSearchPage에서 처리).
 // 실험(ui-sandbox) 버전: 타이핑 대신 지도 탭으로도 좌표를 고를 수 있고, 출발지 기본값은 브라우저
-// Geolocation으로 채운다. 실제 BIUM 리포지토리(frontend/)에는 아직 반영 안 함.
+// Geolocation으로 채운다. 실제 텅텅 리포지토리(frontend/)에는 아직 반영 안 함.
 
 export interface RouteSearchValues {
   originText: string;

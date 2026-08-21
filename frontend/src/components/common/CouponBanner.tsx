@@ -19,7 +19,7 @@ export function CouponBanner() {
   return (
     <div className="coupon-banner">
       <div>
-        <div className="coupon-banner__text">🎉 BIUM 오픈 기념 선착순 쿠폰</div>
+        <div className="coupon-banner__text">🎉 텅텅 오픈 기념 선착순 쿠폰</div>
         <div className="coupon-banner__sub">
           {claimed ? "이미 받으셨어요" : soldOut ? "쿠폰이 모두 소진됐어요" : `남은 수량 ${remaining}장`}
         </div>

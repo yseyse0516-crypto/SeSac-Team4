@@ -1,4 +1,4 @@
--- BIUM PostgreSQL 16 DDL
+-- 텅텅 PostgreSQL 16 DDL
 -- ERD 기준: CLAUDE.md §9 (4조 최종 명세서 §8)
 -- ORM 미사용 원칙에 따라 원시 SQL로 직접 관리한다 (backend/app/core/db.py 커넥션 풀에서 실행).
 

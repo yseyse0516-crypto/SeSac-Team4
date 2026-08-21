@@ -11,7 +11,7 @@ interface Account {
   nickname: string;
 }
 
-const ACCOUNTS_KEY = "bium_sandbox_accounts";
+const ACCOUNTS_KEY = "tangtang_sandbox_accounts";
 
 // 닉네임: 한글로 8자 미만. 비밀번호: 영어+숫자를 모두 포함해서 8~20자(그 외 문자 불가).
 const NICKNAME_PATTERN = /^[가-힣]{1,7}$/;
@@ -106,7 +106,7 @@ export function AuthPage({ onLoggedIn, reason = "community" }: AuthPageProps) {
   return (
     <div className="auth-page">
       <div className="auth-page__card">
-        <h1 className="auth-page__title">BIUM {mode === "login" ? "로그인" : "회원가입"}</h1>
+        <h1 className="auth-page__title">텅텅 {mode === "login" ? "로그인" : "회원가입"}</h1>
         <p className="auth-page__subtitle">{REASON_SUBTITLE[mode][reason]}</p>
 
         {notice && <p className="auth-page__notice">{notice}</p>}

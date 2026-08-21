@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI):
     pool.close()
 
 
-app = FastAPI(title="BIUM API", lifespan=lifespan)
+app = FastAPI(title="텅텅 API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

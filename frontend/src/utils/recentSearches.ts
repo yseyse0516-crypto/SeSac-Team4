@@ -4,7 +4,7 @@
 
 export type SearchCategory = "map" | "subway" | "bike";
 
-const STORAGE_KEY_PREFIX = "bium_sandbox_recent_searches_";
+const STORAGE_KEY_PREFIX = "tangtang_sandbox_recent_searches_";
 const MAX_ITEMS = 8;
 
 const SEED_BY_CATEGORY: Record<SearchCategory, string[]> = {

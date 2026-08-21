@@ -3,9 +3,9 @@ services:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${DB_NAME:-bium}
-      POSTGRES_USER: ${DB_USER:-bium}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-bium}
+      POSTGRES_DB: ${DB_NAME:-tangtang}
+      POSTGRES_USER: ${DB_USER:-tangtang}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-tangtang}
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:
@@ -13,7 +13,7 @@ services:
       - ./backend/sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
       - ./backend/sql/02_seed.sql:/docker-entrypoint-initdb.d/02_seed.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-bium}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-tangtang}"]
       interval: 5s
       timeout: 5s
       retries: 5

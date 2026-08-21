@@ -12,7 +12,7 @@ export interface CommunityPost {
   createdAt: number;
 }
 
-const STORAGE_KEY = "bium_sandbox_community_posts";
+const STORAGE_KEY = "tangtang_sandbox_community_posts";
 
 function readAll(): CommunityPost[] {
   try {

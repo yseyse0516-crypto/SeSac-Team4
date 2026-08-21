@@ -1,4 +1,4 @@
-/* "BIUM" 디자인 토큰 — Cool & Clear 컨셉 (docs/spec/ui-ux-guide.md §1 기준).
+/* "텅텅" 디자인 토큰 — Cool & Clear 컨셉 (docs/spec/ui-ux-guide.md §1 기준).
    화면 컴포넌트들은 색상을 직접 쓰지 않고 이 변수(var(--bg) 등)만 참조한다.
    나중에 팀이 색을 바꾸기로 하면 이 파일 한 곳만 고치면 전체 화면에 반영된다. */
 
